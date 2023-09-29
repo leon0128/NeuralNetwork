@@ -10,6 +10,9 @@ public:
     Layer(std::size_t column
         , ActivationTag tag);
 
+    ActivationTag activation() const noexcept
+        {return mActivationTag;}
+
     auto &input()
         {return mInput;}
     const auto &input() const

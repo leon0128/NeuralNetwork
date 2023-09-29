@@ -31,6 +31,7 @@ public:
 
 private:
     bool randomizeParameter();
+    bool propagate(const Matrix<double> &trainingInput);
 
     bool trainingError(const std::string &what) const;
 

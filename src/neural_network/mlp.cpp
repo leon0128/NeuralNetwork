@@ -1,5 +1,10 @@
 #include <iostream>
+#include <cmath>
+#include <deque>
+#include <numeric>
+#include <algorithm>
 
+#include "random.hpp"
 #include "bias.hpp"
 #include "weight.hpp"
 #include "layer.hpp"
@@ -55,6 +60,72 @@ bool Mlp::train(std::size_t epochSize
         || trainingInput.empty())
         return trainingError("data sizes for training is invalid.");
 
+    if(!randomizeParameter())
+        return false;
+
+    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
+    {
+        std::deque<std::size_t> trainingIndices(trainingInput.size());
+        std::iota(trainingIndices.begin()
+            , trainingIndices.end()
+            , 0ull);
+        std::shuffle(trainingIndices.begin()
+            , trainingIndices.end()
+            , RANDOM.engine());
+
+        while(!trainingIndices.empty())
+        {
+            for(std::size_t batch; batch < batchSize; batch++)
+            {
+                std::size_t trainingIndex{0ull};
+                if(!trainingIndices.empty())
+                {
+                    trainingIndex = trainingIndices.front();
+                    trainingIndices.pop_front();
+                }
+                else
+                    trainingIndex = RANDOM(trainingInput.size());
+
+                if(!propagate(trainingInput[trainingIndex]))
+            }
+        }
+    }
+
+    return true;
+}
+
+bool Mlp::randomizeParameter()
+{
+    auto &&prevLayerIter{mLayers.begin()};
+    auto &&layerIter{mLayers.begin()};
+    layerIter++;
+    auto &&weightIter{mWeights.begin()};
+    auto &&biasIter{mBiases.begin()};
+
+    while(layerIter != mLayers.end())
+    {
+        switch((*layerIter)->activation())
+        {
+            case(ActivationTag::ELU):
+            {
+                std::normal_distribution<> dist{0.0, std::sqrt(2.0 / (*prevLayerIter)->output().column())};
+                for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
+                    for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
+                        (*weightIter)->data()[r][c] = dist(RANDOM.engine());
+                for(std::size_t c{0ull}; c < (*biasIter)->data().column(); c++)
+                    (*biasIter)->data()[0ull][c] = 0.1;
+                break;
+            }
+            case(ActivationTag::NONE):
+                break;
+        }
+
+        prevLayerIter++;
+        layerIter++;
+        weightIter++;
+        biasIter++;
+    }
+    
     return true;
 }
 
