@@ -47,6 +47,7 @@ void Mlp::addLayer(Layer *layer)
 bool Mlp::train(std::size_t epochSize
     , std::size_t batchSize
     , ErrorTag errorTag
+    , OptimizationTag optimizationTag
     , const std::vector<Matrix<double>> &trainingInput
     , const std::vector<Matrix<double>> &trainingOutput
     , const std::vector<Matrix<double>> &validationInput
@@ -75,7 +76,14 @@ bool Mlp::train(std::size_t epochSize
 
         while(!trainingIndices.empty())
         {
-            for(std::size_t batch; batch < batchSize; batch++)
+            std::list<Weight*> weightGradients;
+            std::list<Bias*> biasGradients;
+            for(auto &&weight : mWeights)
+                weightGradients.push_back(new Weight{weight->data().row(), weight->data().column()});
+            for(auto &&bias : mBiases)
+                biasGradients.push_back(new Bias{bias->data().column()});
+
+            for(std::size_t batch{0ull}; batch < batchSize; batch++)
             {
                 std::size_t trainingIndex{0ull};
                 if(!trainingIndices.empty())
@@ -87,7 +95,22 @@ bool Mlp::train(std::size_t epochSize
                     trainingIndex = RANDOM(trainingInput.size());
 
                 if(!propagate(trainingInput[trainingIndex]))
+                    return false;
+                if(!backpropagate(trainingOutput[trainingIndex]
+                    , errorTag
+                    , weightGradients
+                    , biasGradients))
+                    return false;
             }
+
+            if(!calculateAverage(batchSize
+                , weightGradients
+                , biasGradients))
+                return false;
+            if(!updateParameter(optimizationTag
+                , weightGradients
+                , biasGradients))
+                return false;
         }
     }
 
@@ -126,6 +149,33 @@ bool Mlp::randomizeParameter()
         biasIter++;
     }
     
+    return true;
+}
+
+bool Mlp::propagate(const Matrix<double> &trainingInput)
+{
+    return true;
+}
+
+bool Mlp::backpropagate(const Matrix<double> &trainingOutput
+    , ErrorTag errorTag
+    , std::list<Weight*> &weightGradients
+    , std::list<Bias*> &biasGradients)
+{
+    return true;
+}
+
+bool Mlp::calculateAverage(std::size_t batchSize
+    , std::list<Weight*> &weightGradients
+    , std::list<Bias*> &biasGradients)
+{
+    return true;
+}
+
+bool Mlp::updateParameter(OptimizationTag optimizationTag
+    , std::list<Weight*> &weightGradients
+    , std::list<Bias*> &biasGradients)
+{
     return true;
 }
 

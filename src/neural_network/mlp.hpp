@@ -22,6 +22,7 @@ public:
     bool train(std::size_t epochSize
         , std::size_t batchSize
         , ErrorTag errorTag
+        , OptimizationTag optimizationTag
         , const std::vector<Matrix<double>> &trainingInput
         , const std::vector<Matrix<double>> &trainingOutput
         , const std::vector<Matrix<double>> &validationInput
@@ -32,6 +33,16 @@ public:
 private:
     bool randomizeParameter();
     bool propagate(const Matrix<double> &trainingInput);
+    bool backpropagate(const Matrix<double> &trainingOutput
+        , ErrorTag errorTag
+        , std::list<Weight*> &weightGradients
+        , std::list<Bias*> &biasGradients);
+    bool calculateAverage(std::size_t batchSize
+        , std::list<Weight*> &weightGradients
+        , std::list<Bias*> &biasGradients);
+    bool updateParameter(OptimizationTag optimizationTag
+        , std::list<Weight*> &weightGradients
+        , std::list<Bias*> &biasGradients);
 
     bool trainingError(const std::string &what) const;
 

@@ -57,6 +57,7 @@ int main(int argc, char **argv)
     mlp.train(10ull
         , 1ull
         , ErrorTag::MSE
+        , OptimizationTag::ADAM
         , trainingInput
         , trainingOutput
         , validationInput

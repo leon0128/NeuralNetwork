@@ -13,4 +13,10 @@ enum class ActivationTag
     , ELU
 };
 
+enum class OptimizationTag
+{
+    NONE
+    , ADAM
+};
+
 #endif
