@@ -31,6 +31,16 @@ public:
         , const std::vector<Matrix<double>> &testOutput);
 
 private:
+    bool checkValidity(std::size_t epochSize
+        , std::size_t batchSize
+        , ErrorTag errorTag
+        , OptimizationTag optimizationTag
+        , const std::vector<Matrix<double>> &trainingInput
+        , const std::vector<Matrix<double>> &trainingOutput
+        , const std::vector<Matrix<double>> &validationInput
+        , const std::vector<Matrix<double>> &validationOutput
+        , const std::vector<Matrix<double>> &testInput
+        , const std::vector<Matrix<double>> &testOutput);
     bool randomizeParameter();
     bool propagate(const Matrix<double> &trainingInput);
     bool backpropagate(const Matrix<double> &trainingOutput

@@ -55,11 +55,17 @@ bool Mlp::train(std::size_t epochSize
     , const std::vector<Matrix<double>> &testInput
     , const std::vector<Matrix<double>> &testOutput)
 {
-    if(trainingInput.size() != trainingOutput.size()
-        || validationInput.size() != validationOutput.size()
-        || testInput.size() != testOutput.size()
-        || trainingInput.empty())
-        return trainingError("data sizes for training is invalid.");
+    if(!checkValidity(epochSize
+        , batchSize
+        , errorTag
+        , optimizationTag
+        , trainingInput
+        , trainingOutput
+        , validationInput
+        , validationOutput
+        , testInput
+        , testOutput))
+        return false;
 
     if(!randomizeParameter())
         return false;
@@ -113,6 +119,32 @@ bool Mlp::train(std::size_t epochSize
                 return false;
         }
     }
+
+    return true;
+}
+
+bool Mlp::checkValidity(std::size_t epochSize
+    , std::size_t batchSize
+    , ErrorTag errorTag
+    , OptimizationTag optimizationTag
+    , const std::vector<Matrix<double>> &trainingInput
+    , const std::vector<Matrix<double>> &trainingOutput
+    , const std::vector<Matrix<double>> &validationInput
+    , const std::vector<Matrix<double>> &validationOutput
+    , const std::vector<Matrix<double>> &testInput
+    , const std::vector<Matrix<double>> &testOutput)
+{
+    if(trainingInput.size() != trainingOutput.size()
+        || validationInput.size() != validationOutput.size()
+        || testInput.size() != testOutput.size()
+        || trainingInput.empty())
+        return trainingError("data sizes for training is invalid.");
+    if(epochSize == 0ull
+        || batchSize == 0ull)
+        return trainingError("epoch/batch sizes is invalid.");
+    if(errorTag == ErrorTag::NONE
+        || optimizationTag == OptimizationTag::NONE)
+        return trainingError("error/optimization should be selected.");
 
     return true;
 }
