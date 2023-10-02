@@ -159,7 +159,7 @@ bool Mlp::randomizeParameter()
 
     while(layerIter != mLayers.end())
     {
-        switch((*layerIter)->activation())
+        switch((*layerIter)->activationTag())
         {
             case(ActivationTag::ELU):
             {
@@ -186,6 +186,8 @@ bool Mlp::randomizeParameter()
 
 bool Mlp::propagate(const Matrix<double> &trainingInput)
 {
+    // mLayers.front()->
+
     return true;
 }
 
