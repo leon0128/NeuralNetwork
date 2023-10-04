@@ -107,6 +107,11 @@ bool Mlp::train(std::size_t epochSize
                     , weightGradients
                     , biasGradients))
                     return false;
+
+                for(auto &&gradient : weightGradients)
+                    delete gradient;
+                for(auto &&gradient : biasGradients)
+                    delete gradient;
             }
 
             if(!calculateAverage(batchSize
@@ -145,6 +150,8 @@ bool Mlp::checkValidity(std::size_t epochSize
     if(errorTag == ErrorTag::NONE
         || optimizationTag == OptimizationTag::NONE)
         return trainingError("error/optimization should be selected.");
+    if(mLayers.empty())
+        return trainingError("multi-layer perceptron has no layers.");
 
     return true;
 }
@@ -186,7 +193,25 @@ bool Mlp::randomizeParameter()
 
 bool Mlp::propagate(const Matrix<double> &trainingInput)
 {
-    // mLayers.front()->
+    auto &&prevLayerIter{mLayers.begin()};
+    auto &&nextLayerIter{mLayers.begin()};
+    nextLayerIter++;
+    auto &&weightIter{mWeights.begin()};
+    auto &&biasIter{mBiases.begin()};
+
+    // input layer
+    (*prevLayerIter)->input(trainingInput);
+    if(!(*prevLayerIter)->activate())
+        return false;
+    
+    // others
+    for(; nextLayerIter != mLayers.end(); prevLayerIter++, nextLayerIter++, weightIter++, biasIter++)
+    {
+        (*nextLayerIter)->input((*prevLayerIter)->input() * (*weightIter)->data());
+        (*nextLayerIter)->input() += (*biasIter)->data();
+        if(!(*nextLayerIter)->activate())
+            return false;
+    }
 
     return true;
 }

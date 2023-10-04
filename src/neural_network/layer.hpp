@@ -1,8 +1,6 @@
 #ifndef NEURAL_NETWORK_LAYER_HPP
 #define NEURAL_NETWORK_LAYER_HPP
 
-#include <cmath>
-
 #include "matrix/matrix.hpp"
 #include "tag.hpp"
 
@@ -17,6 +15,8 @@ public:
 
     bool activate();
 
+    void input(const Matrix<double>&);
+    void input(Matrix<double>&&);
     auto &input()
         {return mInput;}
     const auto &input() const
@@ -27,11 +27,6 @@ public:
         {return mOutput;}
 
 private:
-    double activateNone(double in) const
-        {return in;}
-    double activateElu(double in) const
-        {return in >= 0.0 ? in : std::exp(in) - 1.0;}
-
     ActivationTag mActivationTag;
     Matrix<double> mInput;
     Matrix<double> mOutput;
