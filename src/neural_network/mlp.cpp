@@ -221,6 +221,8 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
     , std::list<Weight*> &weightGradients
     , std::list<Bias*> &biasGradients)
 {
+    // output: 
+
     return true;
 }
 
