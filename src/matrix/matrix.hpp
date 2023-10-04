@@ -16,8 +16,8 @@ public:
         , std::size_t columnSize);
     Matrix(const Matrix<T>&);
     Matrix(Matrix<T>&&);
-    Matrix &operator =(const Matrix<T> &other) = default;
-    Matrix &operator =(Matrix<T> &&other) = default;
+    Matrix &operator =(const Matrix<T> &other);
+    Matrix &operator =(Matrix<T> &&other);
     ~Matrix();
 
     std::size_t row() const noexcept
@@ -69,7 +69,7 @@ template<class T>
 Matrix<T>::Matrix(const Matrix<T> &other)
     : mRow{other.row()}
     , mColumn{other.column()}
-    , mData{new T[mRow * mColumn]}
+    , mData{new T[other.row() * other.column()]}
 {
     for(std::size_t r{0ull}; r < row(); r++)
     {
@@ -87,6 +87,38 @@ Matrix<T>::Matrix(Matrix<T> &&other)
     other.mRow = 0ull;
     other.mColumn = 0ull;
     other.mData = nullptr;
+}
+
+template<class T>
+Matrix<T> &Matrix<T>::operator=(const Matrix<T> &other)
+{
+    if(this != &other)
+    {
+        delete []mData;
+        mRow = other.row();
+        mColumn = other.column();
+        mData = new T[mRow * mColumn];
+
+        for(std::size_t r{0ull}; r < mRow; r++)
+            for(std::size_t c{0ull}; c < mColumn; c++)
+                operator[](r)[c] = other[r][c];
+    }
+
+    return *this;
+}
+
+template<class T>
+Matrix<T> &Matrix<T>::operator=(Matrix<T> &&other)
+{
+    if(this != other)
+    {
+        delete []mData;
+        mRow = other.row();
+        mColumn = other.column();
+        mData = other.data();
+    }
+
+    return *this;
 }
 
 template<class T>
@@ -142,8 +174,6 @@ Matrix<T> operator -(const Matrix<T> &lhs
     Matrix result{lhs};
     return result -= rhs;
 }
-
-#include <iostream>
 
 template<class T>
 Matrix<T> operator *(const Matrix<T> &lhs
