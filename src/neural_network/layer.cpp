@@ -16,19 +16,7 @@ Layer::Layer(std::size_t column
 
 bool Layer::activate()
 {
-    std::function<double(double)> activationFunction;
-
-    switch(activationTag())
-    {
-        case(ActivationTag::NONE):
-            activationFunction = FUNCTION::activateNone<double>;
-            break;
-
-        case(ActivationTag::ELU):
-            activationFunction = FUNCTION::activateElu<double>;
-            break;
-    }
-
+    std::function<double(double)> activationFunction{FUNCTION::activationFunction<double>(activationTag())};
     for(std::size_t c{0ull}; c < input().column(); c++)
         output()[0ull][c] = activationFunction(input()[0ull][c]);
 

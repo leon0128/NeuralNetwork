@@ -3,8 +3,10 @@
 #include <deque>
 #include <numeric>
 #include <algorithm>
+#include <stdexcept>
 
 #include "random.hpp"
+#include "function.hpp"
 #include "bias.hpp"
 #include "weight.hpp"
 #include "layer.hpp"
@@ -107,11 +109,6 @@ bool Mlp::train(std::size_t epochSize
                     , weightGradients
                     , biasGradients))
                     return false;
-
-                for(auto &&gradient : weightGradients)
-                    delete gradient;
-                for(auto &&gradient : biasGradients)
-                    delete gradient;
             }
 
             if(!calculateAverage(batchSize
@@ -122,6 +119,11 @@ bool Mlp::train(std::size_t epochSize
                 , weightGradients
                 , biasGradients))
                 return false;
+
+            for(auto &&gradient : weightGradients)
+                delete gradient;
+            for(auto &&gradient : biasGradients)
+                delete gradient;
         }
     }
 
@@ -221,7 +223,49 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
     , std::list<Weight*> &weightGradients
     , std::list<Bias*> &biasGradients)
 {
-    // output: 
+    // reverse iterators
+    auto &&prevLayerIter{mLayers.rbegin()};
+    prevLayerIter++;
+    auto &&nextLayerIter{mLayers.rbegin()};
+    auto &&weightIter{mWeights.rbegin()};
+    auto &&biasIter{mBiases.rbegin()};
+    auto &&weightGradientIter{weightGradients.rbegin()};
+    auto &&biasGradientIter{biasGradients.rbegin()};
+
+    auto &&differentiatedErrorFunction{FUNCTION::differentiatedErrorFunction<double>(errorTag)};
+    auto &&differentiatedActivationFunction{FUNCTION::differentiatedActivationFunction<double>((*nextLayerIter)->activationTag())};
+
+    // output layer
+    Matrix<double> error{1ull, (*nextLayerIter)->output().column()};
+    for(std::size_t c{0ull}; c < error.column(); c++)
+    {
+        error[0ull][c]
+            = differentiatedErrorFunction(trainingOutput[0ull][c], (*nextLayerIter)->output()[0ull][c])
+                * differentiatedActivationFunction((*nextLayerIter)->output()[0ull][c]);
+    }
+    (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
+    (*biasGradientIter)->data() += error;
+
+    // others
+    for(prevLayerIter++
+            , nextLayerIter++
+            , weightGradientIter++
+            , biasGradientIter++;
+        prevLayerIter != mLayers.rend();
+        prevLayerIter++
+            , nextLayerIter++
+            , weightIter++
+            , biasIter++
+            , weightGradientIter++
+            , biasGradientIter++)
+    {
+        differentiatedActivationFunction = FUNCTION::differentiatedActivationFunction<double>((*nextLayerIter)->activationTag());
+        error = error * ~(*weightIter)->data();
+        for(std::size_t c{0ull}; c < error.column(); c++)
+            error[0ull][c] *= differentiatedActivationFunction((*nextLayerIter)->output()[0ull][c]);
+        (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
+        (*biasGradientIter)->data() += error;
+    }
 
     return true;
 }
@@ -230,6 +274,13 @@ bool Mlp::calculateAverage(std::size_t batchSize
     , std::list<Weight*> &weightGradients
     , std::list<Bias*> &biasGradients)
 {
+    double denominator{static_cast<double>(batchSize)};
+
+    for(auto &&gradient : weightGradients)
+        gradient->data().apply([&](double in){return in / denominator;});
+    for(auto &&gradient : biasGradients)
+        gradient->data().apply([&](double in){return in / denominator;});
+
     return true;
 }
 
@@ -237,6 +288,37 @@ bool Mlp::updateParameter(OptimizationTag optimizationTag
     , std::list<Weight*> &weightGradients
     , std::list<Bias*> &biasGradients)
 {
+    auto &&optimizationFunction{FUNCTION::optimizationFunction<double>(optimizationTag)};
+
+    auto &&weightIter{mWeights.begin()};
+    auto &&biasIter{mBiases.begin()};
+    auto &&weightGradientIter{weightGradients.begin()};
+    auto &&biasGradientIter{biasGradients.begin()};
+
+    for(;
+        weightIter != mWeights.end();
+        weightIter++
+            , biasIter++
+            , weightGradientIter++
+            , biasGradientIter++)
+    {
+        for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
+        {
+            for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
+            {
+                (*weightIter)->data()[r][c]
+                    = optimizationFunction((*weightIter)->data()[r][c]
+                        , (*weightGradientIter)->data()[r][c]);
+            }
+        }
+        for(std::size_t c{0ull}; c < (*biasIter)->data().column(); c++)
+        {
+            (*biasIter)->data()[0ull][c]
+                = optimizationFunction((*biasIter)->data()[0ull][c]
+                    , (*biasGradientIter)->data()[0ull][c]);
+        }
+    }
+
     return true;
 }
 

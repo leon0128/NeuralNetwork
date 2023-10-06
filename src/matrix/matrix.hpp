@@ -3,6 +3,7 @@
 
 #include <stdexcept>
 #include <cstddef>
+#include <functional>
 
 template<class T>
 class Matrix
@@ -10,8 +11,7 @@ class Matrix
 public:
     using ValueType = T;
 
-    // create rowSize * columnSize matrix object and
-    // initialize with initValue
+    // create rowSize * columnSize matrix object
     Matrix(std::size_t rowSize
         , std::size_t columnSize);
     Matrix(const Matrix<T>&);
@@ -28,6 +28,8 @@ public:
         {return mData;}
     const ValueType *data() const noexcept
         {return mData;}
+
+    void apply(const std::function<ValueType(ValueType)> &func);
 
     ValueType *operator [](std::size_t rowIndex)
         {return &data()[rowIndex * column()];}
@@ -69,7 +71,7 @@ template<class T>
 Matrix<T>::Matrix(const Matrix<T> &other)
     : mRow{other.row()}
     , mColumn{other.column()}
-    , mData{new T[other.row() * other.column()]}
+    , mData{new T[mRow * mColumn]}
 {
     for(std::size_t r{0ull}; r < row(); r++)
     {
@@ -110,12 +112,16 @@ Matrix<T> &Matrix<T>::operator=(const Matrix<T> &other)
 template<class T>
 Matrix<T> &Matrix<T>::operator=(Matrix<T> &&other)
 {
-    if(this != other)
+    if(this != &other)
     {
         delete []mData;
         mRow = other.row();
         mColumn = other.column();
         mData = other.data();
+
+        other.mRow = 0ull;
+        other.mColumn = 0ull;
+        other.mData = nullptr;
     }
 
     return *this;
@@ -125,6 +131,14 @@ template<class T>
 Matrix<T>::~Matrix()
 {
     delete []mData;
+}
+
+template<class T>
+void Matrix<T>::apply(const std::function<ValueType(ValueType)> &appliedFunction)
+{
+    for(std::size_t r{0ull}; r < row(); r++)
+        for(std::size_t c{0ull}; c < column(); c++)
+            operator[](r)[c] = appliedFunction(operator[](r)[c]);
 }
 
 template<class T>
@@ -174,6 +188,8 @@ Matrix<T> operator -(const Matrix<T> &lhs
     Matrix result{lhs};
     return result -= rhs;
 }
+
+#include <iostream>
 
 template<class T>
 Matrix<T> operator *(const Matrix<T> &lhs
