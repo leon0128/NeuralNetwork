@@ -4,6 +4,7 @@
 #include <numeric>
 #include <algorithm>
 #include <stdexcept>
+#include <limits>
 
 #include "random.hpp"
 #include "function.hpp"
@@ -55,7 +56,8 @@ bool Mlp::train(std::size_t epochSize
     , const std::vector<Matrix<double>> &validationInput
     , const std::vector<Matrix<double>> &validationOutput
     , const std::vector<Matrix<double>> &testInput
-    , const std::vector<Matrix<double>> &testOutput)
+    , const std::vector<Matrix<double>> &testOutput
+    , bool shouldStopEarly)
 {
     if(!checkValidity(epochSize
         , batchSize
@@ -72,6 +74,7 @@ bool Mlp::train(std::size_t epochSize
     if(!randomizeParameter())
         return false;
 
+    double prevError{std::numeric_limits<double>::max()};
     for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
     {
         std::deque<std::size_t> trainingIndices(trainingInput.size());
@@ -125,8 +128,32 @@ bool Mlp::train(std::size_t epochSize
             for(auto &&gradient : biasGradients)
                 delete gradient;
         }
+
+        
+        double error{calculateError(validationInput, validationOutput, errorTag)};
+        std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
+        if(shouldStopEarly && error > prevError)
+        {
+            std::cout << "early stopping has been activated."
+                << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
+            break;
+        }
+        prevError = error;
     }
 
+    return true;
+}
+
+bool Mlp::activate(const Matrix<double> &input
+    , Matrix<double> &output)
+{
+    if(!checkValidity(input))
+        return false;
+
+    if(!propagate(input))
+        return false;
+    
+    output = mLayers.back()->output();
     return true;
 }
 
@@ -139,7 +166,7 @@ bool Mlp::checkValidity(std::size_t epochSize
     , const std::vector<Matrix<double>> &validationInput
     , const std::vector<Matrix<double>> &validationOutput
     , const std::vector<Matrix<double>> &testInput
-    , const std::vector<Matrix<double>> &testOutput)
+    , const std::vector<Matrix<double>> &testOutput) const
 {
     if(trainingInput.size() != trainingOutput.size()
         || validationInput.size() != validationOutput.size()
@@ -154,6 +181,14 @@ bool Mlp::checkValidity(std::size_t epochSize
         return trainingError("error/optimization should be selected.");
     if(mLayers.empty())
         return trainingError("multi-layer perceptron has no layers.");
+
+    return true;
+}
+
+bool Mlp::checkValidity(const Matrix<double> &input) const
+{
+    if(mLayers.empty())
+        return activationError("multi-layer perceptron has no layers");
 
     return true;
 }
@@ -322,9 +357,39 @@ bool Mlp::updateParameter(OptimizationTag optimizationTag
     return true;
 }
 
+double Mlp::calculateError(const std::vector<Matrix<double>> &inputs
+    , const std::vector<Matrix<double>> &outputs
+    , ErrorTag errorTag)
+{
+    auto &&errorFunction{FUNCTION::errorFunction<double>(errorTag)};
+
+    double error{0.0};
+
+    for(auto &&inputIter{inputs.begin()}
+            , &&outputIter{outputs.begin()};
+        inputIter != inputs.end();
+        inputIter++
+            , outputIter++)
+    {
+        propagate(*inputIter);
+        for(std::size_t c{0ull}; c < outputIter->column(); c++)
+            error += errorFunction((*outputIter)[0ull][c], mLayers.back()->output()[0ull][c]);
+    }
+
+    return error;
+}
+
 bool Mlp::trainingError(const std::string &what) const
 {
     std::cerr << "Mlp::trainingError():"
+        << "\n    what: " << what
+        << std::endl;
+    return false;
+}
+
+bool Mlp::activationError(const std::string &what) const
+{
+    std::cerr << "Mlp::activationError():"
         << "\n    what: " << what
         << std::endl;
     return false;

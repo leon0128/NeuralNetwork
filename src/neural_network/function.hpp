@@ -12,7 +12,7 @@ namespace FUNCTION
 
 inline const double eluAlpha{1.0};
 
-inline const double adamLearningRate{0.001};
+inline const double adamLearningRate{0.00001};
 inline const double adamBeta1{0.9};
 inline const double adamBeta2{0.999};
 inline const double adamEpsilon{1.0e-7};

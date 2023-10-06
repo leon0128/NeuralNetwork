@@ -12,6 +12,7 @@ public:
     using ValueType = T;
 
     // create rowSize * columnSize matrix object
+    Matrix();
     Matrix(std::size_t rowSize
         , std::size_t columnSize);
     Matrix(const Matrix<T>&);
@@ -58,6 +59,14 @@ template<class T>
 Matrix<T> operator ~(const Matrix<T> &other);
 
 // implementations
+template<class T>
+Matrix<T>::Matrix()
+    : mRow{0ull}
+    , mColumn{0ull}
+    , mData{nullptr}
+{
+}
+
 template<class T>
 Matrix<T>::Matrix(std::size_t rowSize
     , std::size_t columnSize)
