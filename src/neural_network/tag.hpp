@@ -5,12 +5,16 @@ enum class ErrorTag
 {
     NONE
     , MSE
+    , CROSS_ENTROPY
 };
 
 enum class ActivationTag
 {
     NONE
     , ELU
+    , SIGMOID
+    , RELU
+    , SOFTMAX
 };
 
 enum class OptimizationTag

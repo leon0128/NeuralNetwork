@@ -17,6 +17,19 @@ Layer::Layer(std::size_t column
 bool Layer::activate()
 {
     std::function<double(double)> activationFunction{FUNCTION::activationFunction<double>(activationTag())};
+    
+    switch(activationTag())
+    {
+        case(ActivationTag::SOFTMAX):
+            FUNCTION::softmaxSum = 0.0;
+            for(std::size_t c{0ull}; c < input().column(); c++)
+                FUNCTION::softmaxSum += std::exp(input()[0ull][c]);
+            break;
+        
+        default:
+            break;
+    }
+
     for(std::size_t c{0ull}; c < input().column(); c++)
         output()[0ull][c] = activationFunction(input()[0ull][c]);
 

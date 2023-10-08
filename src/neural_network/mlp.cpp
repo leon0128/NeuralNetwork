@@ -129,7 +129,6 @@ bool Mlp::train(std::size_t epochSize
                 delete gradient;
         }
 
-        
         double error{calculateError(validationInput, validationOutput, errorTag)};
         std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
         if(shouldStopEarly && error > prevError)
@@ -176,9 +175,8 @@ bool Mlp::checkValidity(std::size_t epochSize
     if(epochSize == 0ull
         || batchSize == 0ull)
         return trainingError("epoch/batch sizes is invalid.");
-    if(errorTag == ErrorTag::NONE
-        || optimizationTag == OptimizationTag::NONE)
-        return trainingError("error/optimization should be selected.");
+    if(errorTag == ErrorTag::NONE)
+        return trainingError("error should be selected.");
     if(mLayers.empty())
         return trainingError("multi-layer perceptron has no layers.");
 
@@ -205,7 +203,11 @@ bool Mlp::randomizeParameter()
     {
         switch((*layerIter)->activationTag())
         {
+            case(ActivationTag::NONE):
+            case(ActivationTag::SIGMOID):
             case(ActivationTag::ELU):
+            case(ActivationTag::SOFTMAX):
+            case(ActivationTag::RELU):
             {
                 std::normal_distribution<> dist{0.0, std::sqrt(2.0 / (*prevLayerIter)->output().column())};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
@@ -213,10 +215,9 @@ bool Mlp::randomizeParameter()
                         (*weightIter)->data()[r][c] = dist(RANDOM.engine());
                 for(std::size_t c{0ull}; c < (*biasIter)->data().column(); c++)
                     (*biasIter)->data()[0ull][c] = 0.1;
+
                 break;
             }
-            case(ActivationTag::NONE):
-                break;
         }
 
         prevLayerIter++;
@@ -244,7 +245,7 @@ bool Mlp::propagate(const Matrix<double> &trainingInput)
     // others
     for(; nextLayerIter != mLayers.end(); prevLayerIter++, nextLayerIter++, weightIter++, biasIter++)
     {
-        (*nextLayerIter)->input((*prevLayerIter)->input() * (*weightIter)->data());
+        (*nextLayerIter)->input((*prevLayerIter)->output() * (*weightIter)->data());
         (*nextLayerIter)->input() += (*biasIter)->data();
         if(!(*nextLayerIter)->activate())
             return false;

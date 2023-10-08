@@ -1,6 +1,7 @@
 #ifndef MATRIX_MATRIX_HPP
 #define MATRIX_MATRIX_HPP
 
+#include <ostream>
 #include <stdexcept>
 #include <cstddef>
 #include <functional>
@@ -57,6 +58,12 @@ Matrix<T> operator *(const Matrix<T> &lhs
     , const Matrix<T> &rhs);
 template<class T>
 Matrix<T> operator ~(const Matrix<T> &other);
+
+template<class CharT
+    , class TraitsT
+    , class ValueType>
+std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &os
+    , const Matrix<ValueType> &matrix);
 
 // implementations
 template<class T>
@@ -232,6 +239,25 @@ Matrix<T> operator ~(const Matrix<T> &other)
     }
 
     return result;
+}
+
+template<class CharT
+    , class TraitsT
+    , class ValueType>
+std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &os
+    , const Matrix<ValueType> &matrix)
+{
+    os << '[';
+    for(std::size_t r{0ull}; r < matrix.row(); r++)
+    {
+        os << '[';
+        for(std::size_t c{0ull}; c < matrix.column(); c++)
+            os << matrix[r][c] << (c + 1ull != matrix.column() ? "," : "");
+        os << ']' << (r + 1ull != matrix.row() ? "\n" : "");
+    }
+    os << ']';
+
+    return os;
 }
 
 #endif
