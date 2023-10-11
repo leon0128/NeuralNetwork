@@ -5,7 +5,8 @@ enum class ErrorTag
 {
     NONE
     , MSE
-    , CROSS_ENTROPY
+    , BINARY_CROSS_ENTROPY
+    , CATEGORICAL_CROSS_ENTROPY
 };
 
 enum class ActivationTag

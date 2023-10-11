@@ -1,4 +1,5 @@
 #include <vector>
+#include <iostream>
 
 #include "matrix/matrix.hpp"
 #include "neural_network/mlp.hpp"
@@ -9,7 +10,7 @@ int main(int argc, char **argv)
     Mlp mlp;
     mlp.addLayer(new Layer{2ull, ActivationTag::NONE});
     mlp.addLayer(new Layer{4ull, ActivationTag::ELU});
-    mlp.addLayer(new Layer{2ull, ActivationTag::SIGMOID});
+    mlp.addLayer(new Layer{2ull, ActivationTag::SOFTMAX});
 
     std::vector<Matrix<double>> trainingInput;
     std::vector<Matrix<double>> trainingOutput;
@@ -59,7 +60,7 @@ int main(int argc, char **argv)
     testOutput = trainingOutput;
  
     mlp.train(1'000'000ull
-        , 1ull
+        , 4ull
         , ErrorTag::CROSS_ENTROPY
         , OptimizationTag::ADAM
         , trainingInput
@@ -68,7 +69,7 @@ int main(int argc, char **argv)
         , validationOutput
         , testInput
         , testOutput
-        , true);
+        , false);
 
     Matrix<double> result;
     mlp.activate(inputA, result);

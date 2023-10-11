@@ -205,8 +205,6 @@ Matrix<T> operator -(const Matrix<T> &lhs
     return result -= rhs;
 }
 
-#include <iostream>
-
 template<class T>
 Matrix<T> operator *(const Matrix<T> &lhs
     , const Matrix<T> &rhs)
