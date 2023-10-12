@@ -268,17 +268,27 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
     auto &&weightGradientIter{weightGradients.rbegin()};
     auto &&biasGradientIter{biasGradients.rbegin()};
 
-    auto &&differentiatedErrorFunction{FUNCTION::differentiatedErrorFunction<double>(errorTag)};
-    auto &&differentiatedActivationFunction{FUNCTION::differentiatedActivationFunction<double>((*nextLayerIter)->activationTag())};
+    auto &&derivativeErrorFunction{FUNCTION::derivativeErrorFunction<double>(errorTag)};
+    auto &&derivativeActivationFunction{FUNCTION::derivativeActivationFunction<double>((*nextLayerIter)->activationTag())};
 
     // output layer
-    Matrix<double> error{1ull, (*nextLayerIter)->output().column()};
-    for(std::size_t c{0ull}; c < error.column(); c++)
+    Matrix<double> error{1ull, trainingOutput.column()};
+    Matrix<double> dError{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
+    Matrix<double> dActivation{(*nextLayerIter)->output()};
+    switch((*nextLayerIter)->activationTag())
     {
-        error[0ull][c]
-            = differentiatedErrorFunction(trainingOutput[0ull][c], (*nextLayerIter)->output()[0ull][c])
-                * differentiatedActivationFunction((*nextLayerIter)->output()[0ull][c]);
+        case(ActivationTag::NONE):
+        case(ActivationTag::ELU):
+        case(ActivationTag::SIGMOID):
+        case(ActivationTag::RELU):
+            for(std::size_t c{0ull}; c < error.column(); c++)
+                error[0ull][c] = dError[0ull][c] * dActivation[0ull][c];
+            break;
+        case(ActivationTag::SOFTMAX):
+            error = dError * dActivation;
+            break;
     }
+
     (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
     (*biasGradientIter)->data() += error;
 
@@ -295,10 +305,22 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
             , weightGradientIter++
             , biasGradientIter++)
     {
-        differentiatedActivationFunction = FUNCTION::differentiatedActivationFunction<double>((*nextLayerIter)->activationTag());
+        derivativeActivationFunction = FUNCTION::derivativeActivationFunction<double>((*nextLayerIter)->activationTag());
         error = error * ~(*weightIter)->data();
-        for(std::size_t c{0ull}; c < error.column(); c++)
-            error[0ull][c] *= differentiatedActivationFunction((*nextLayerIter)->output()[0ull][c]);
+        dActivation = derivativeActivationFunction((*nextLayerIter)->output());
+        switch((*nextLayerIter)->activationTag())
+        {
+            case(ActivationTag::ELU):
+            case(ActivationTag::NONE):
+            case(ActivationTag::RELU):
+            case(ActivationTag::SIGMOID):
+                for(std::size_t c{0ull}; c < error.column(); c++)
+                    error[0ull][c] *= dActivation[0ull][c];
+                break;
+            case(ActivationTag::SOFTMAX):
+                error = error * dActivation;
+        }
+
         (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
         (*biasGradientIter)->data() += error;
     }
@@ -324,34 +346,91 @@ bool Mlp::updateParameter(OptimizationTag optimizationTag
     , std::list<Weight*> &weightGradients
     , std::list<Bias*> &biasGradients)
 {
+    static std::list<Matrix<double>> weightAdamMs{};
+    static std::list<Matrix<double>> biasAdamMs{};
+    static std::list<Matrix<double>> weightAdamVs{};
+    static std::list<Matrix<double>> biasAdamVs{};
+    static bool isInitialized{false};
+    if(!isInitialized)
+    {
+        for(auto &&gradient : weightGradients)
+        {
+            weightAdamMs.emplace_back(gradient->data().row()
+                , gradient->data().column());
+            weightAdamVs.emplace_back(gradient->data().row()
+                , gradient->data().column());
+        }
+        for(auto &&gradient : biasGradients)
+        {
+            biasAdamMs.emplace_back(gradient->data().row()
+                , gradient->data().column());
+            biasAdamVs.emplace_back(gradient->data().row()
+                , gradient->data().column());
+        }
+        isInitialized = true;
+    }
+
+
     auto &&optimizationFunction{FUNCTION::optimizationFunction<double>(optimizationTag)};
 
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
     auto &&weightGradientIter{weightGradients.begin()};
     auto &&biasGradientIter{biasGradients.begin()};
+    auto &&weightAdamMIter{weightAdamMs.begin()};
+    auto &&weightAdamVIter{weightAdamVs.begin()};
+    auto &&biasAdamMIter{biasAdamMs.begin()};
+    auto &&biasAdamVIter{biasAdamVs.begin()};
 
     for(;
         weightIter != mWeights.end();
         weightIter++
             , biasIter++
             , weightGradientIter++
-            , biasGradientIter++)
+            , biasGradientIter++
+            , weightAdamMIter++
+            , weightAdamVIter++
+            , biasAdamMIter++
+            , biasAdamVIter++)
     {
-        for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
+        switch(optimizationTag)
         {
-            for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
-            {
-                (*weightIter)->data()[r][c]
-                    = optimizationFunction((*weightIter)->data()[r][c]
-                        , (*weightGradientIter)->data()[r][c]);
-            }
+            case(OptimizationTag::NONE):
+                break;
+            case(OptimizationTag::ADAM):
+                FUNCTION::adamM = *weightAdamMIter;
+                FUNCTION::adamV = *weightAdamVIter;
+                break;
         }
-        for(std::size_t c{0ull}; c < (*biasIter)->data().column(); c++)
+
+        (*weightIter)->data()
+            = optimizationFunction((*weightIter)->data()
+                , (*weightGradientIter)->data());
+
+        switch(optimizationTag)
         {
-            (*biasIter)->data()[0ull][c]
-                = optimizationFunction((*biasIter)->data()[0ull][c]
-                    , (*biasGradientIter)->data()[0ull][c]);
+            case(OptimizationTag::NONE):
+                break;
+            case(OptimizationTag::ADAM):
+                *weightAdamMIter = FUNCTION::adamM;
+                *weightAdamVIter = FUNCTION::adamV;
+                FUNCTION::adamM = *biasAdamMIter;
+                FUNCTION::adamV = *biasAdamVIter;
+                break;
+        }
+
+        (*biasIter)->data()
+            = optimizationFunction((*biasIter)->data()
+                , (*biasGradientIter)->data());
+
+        switch(optimizationTag)
+        {
+            case(OptimizationTag::NONE):
+                break;
+            case(OptimizationTag::ADAM):
+                *biasAdamMIter = FUNCTION::adamM;
+                *biasAdamVIter = FUNCTION::adamV;
+                break;
         }
     }
 
@@ -373,8 +452,7 @@ double Mlp::calculateError(const std::vector<Matrix<double>> &inputs
             , outputIter++)
     {
         propagate(*inputIter);
-        for(std::size_t c{0ull}; c < outputIter->column(); c++)
-            error += errorFunction((*outputIter)[0ull][c], mLayers.back()->output()[0ull][c]);
+        error += errorFunction((*outputIter), mLayers.back()->output());
     }
 
     return error;

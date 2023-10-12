@@ -18,8 +18,7 @@ bool Layer::activate()
 {
     auto &&activationFunction{FUNCTION::activationFunction<double>(activationTag())};
 
-    for(std::size_t c{0ull}; c < input().column(); c++)
-        output()[0ull][c] = activationFunction(input()[0ull][c]);
+    output() = activationFunction(input());
 
     return true;
 }

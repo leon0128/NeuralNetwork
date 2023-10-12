@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     Mlp mlp;
     mlp.addLayer(new Layer{2ull, ActivationTag::NONE});
     mlp.addLayer(new Layer{4ull, ActivationTag::ELU});
-    mlp.addLayer(new Layer{2ull, ActivationTag::SOFTMAX});
+    mlp.addLayer(new Layer{2ull, ActivationTag::ELU});
 
     std::vector<Matrix<double>> trainingInput;
     std::vector<Matrix<double>> trainingOutput;
@@ -59,9 +59,9 @@ int main(int argc, char **argv)
     testInput = trainingInput;
     testOutput = trainingOutput;
  
-    mlp.train(1'000'000ull
+    mlp.train(100000ull
         , 4ull
-        , ErrorTag::CROSS_ENTROPY
+        , ErrorTag::CATEGORICAL_CROSS_ENTROPY
         , OptimizationTag::ADAM
         , trainingInput
         , trainingOutput
