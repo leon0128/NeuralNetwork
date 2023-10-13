@@ -3,6 +3,7 @@
 
 #include "matrix/matrix.hpp"
 
+template<class T>
 class ParameterBase
 {
 public:
@@ -16,7 +17,19 @@ public:
         {return mData;}
 
 protected:
-    Matrix<double> mData;
+    Matrix<T> mData;
 };
+
+template<class T>
+ParameterBase<T>::ParameterBase(std::size_t row
+    , std::size_t column)
+    : mData{row, column}
+{
+}
+
+template<class T>
+ParameterBase<T>::~ParameterBase()
+{
+}
 
 #endif

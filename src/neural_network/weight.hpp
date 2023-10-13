@@ -3,11 +3,19 @@
 
 #include "parameter_base.hpp"
 
-class Weight : public ParameterBase
+template<class T>
+class Weight : public ParameterBase<T>
 {
 public:
     Weight(std::size_t row
         , std::size_t column);
 };
+
+template<class T>
+Weight<T>::Weight(std::size_t row
+    , std::size_t column)
+    : ParameterBase<T>{row, column}
+{
+}
 
 #endif

@@ -3,10 +3,17 @@
 
 #include "parameter_base.hpp"
 
-class Bias : public ParameterBase
+template<class T>
+class Bias : public ParameterBase<T>
 {
 public:
     Bias(std::size_t column);
 };
+
+template<class T>
+Bias<T>::Bias(std::size_t column)
+    : ParameterBase<T>{1ull, column}
+{
+}
 
 #endif

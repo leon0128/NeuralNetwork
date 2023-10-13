@@ -1,3 +1,9 @@
+#ifndef NEURAL_NETWORK_MULTI_LAYER_PERCEPTRON_HPP
+#define NEURAL_NETWORK_MULTI_LAYER_PERCEPTRON_HPP
+
+#include <vector>
+#include <list>
+#include <string>
 #include <iostream>
 #include <cmath>
 #include <deque>
@@ -6,21 +12,84 @@
 #include <stdexcept>
 #include <limits>
 
+#include "matrix/matrix.hpp"
 #include "random.hpp"
-#include "function.hpp"
-#include "bias.hpp"
-#include "weight.hpp"
 #include "layer.hpp"
-#include "mlp.hpp"
+#include "weight.hpp"
+#include "bias.hpp"
+#include "function.hpp"
+#include "tag.hpp"
 
-Mlp::Mlp()
+template<class T>
+class MultiLayerPerceptron
+{
+public:
+    MultiLayerPerceptron();
+    ~MultiLayerPerceptron();
+
+    void addLayer(Layer<T> *layer);
+    
+    bool train(std::size_t epochSize
+        , std::size_t batchSize
+        , ErrorTag errorTag
+        , OptimizationTag optimizationTag
+        , const std::vector<Matrix<T>> &trainingInput
+        , const std::vector<Matrix<T>> &trainingOutput
+        , const std::vector<Matrix<T>> &validationInput
+        , const std::vector<Matrix<T>> &validationOutput
+        , const std::vector<Matrix<T>> &testInput
+        , const std::vector<Matrix<T>> &testOutput
+        , bool shouldStopEarly = true);
+
+    bool activate(const Matrix<T> &input
+        , Matrix<T> &output);
+
+private:
+    bool checkValidity(std::size_t epochSize
+        , std::size_t batchSize
+        , ErrorTag errorTag
+        , OptimizationTag optimizationTag
+        , const std::vector<Matrix<T>> &trainingInput
+        , const std::vector<Matrix<T>> &trainingOutput
+        , const std::vector<Matrix<T>> &validationInput
+        , const std::vector<Matrix<T>> &validationOutput
+        , const std::vector<Matrix<T>> &testInput
+        , const std::vector<Matrix<T>> &testOutput) const;
+    bool checkValidity(const Matrix<T> &input) const;
+    bool randomizeParameter();
+    bool propagate(const Matrix<T> &trainingInput);
+    bool backpropagate(const Matrix<T> &trainingOutput
+        , ErrorTag errorTag
+        , std::list<Weight<T>*> &weightGradients
+        , std::list<Bias<T>*> &biasGradients);
+    bool calculateAverage(std::size_t batchSize
+        , std::list<Weight<T>*> &weightGradients
+        , std::list<Bias<T>*> &biasGradients);
+    bool updateParameter(OptimizationTag optimizationTag
+        , std::list<Weight<T>*> &weightGradients
+        , std::list<Bias<T>*> &biasGradients);
+    T calculateError(const std::vector<Matrix<T>> &inputs
+        , const std::vector<Matrix<T>> &outputs
+        , ErrorTag errorTag);
+
+    bool trainingError(const std::string &what) const;
+    bool activationError(const std::string &what) const;
+
+    std::list<Layer<T>*> mLayers;
+    std::list<Weight<T>*> mWeights;
+    std::list<Bias<T>*> mBiases;
+};
+
+template<class T>
+MultiLayerPerceptron<T>::MultiLayerPerceptron()
     : mLayers{}
     , mWeights{}
     , mBiases{}
 {
 }
 
-Mlp::~Mlp()
+template<class T>
+MultiLayerPerceptron<T>::~MultiLayerPerceptron()
 {
     for(auto &&layer : mLayers)
         delete layer;
@@ -30,16 +99,17 @@ Mlp::~Mlp()
         delete bias;
 }
 
-void Mlp::addLayer(Layer *layer)
+template<class T>
+void MultiLayerPerceptron<T>::addLayer(Layer<T> *layer)
 {
     // if layer is not input layer,
     //  weight and bias is created.
     if(!mLayers.empty())
     {
         auto &&lastLayer{mLayers.back()};
-        Weight *weight{new Weight{lastLayer->output().column()
+        Weight<T> *weight{new Weight<T>{lastLayer->output().column()
             , layer->input().column()}};
-        Bias *bias{new Bias{layer->input().column()}};
+        Bias<T> *bias{new Bias<T>{layer->input().column()}};
         mWeights.push_back(weight);
         mBiases.push_back(bias);
     }
@@ -47,16 +117,17 @@ void Mlp::addLayer(Layer *layer)
     mLayers.push_back(layer);
 }
 
-bool Mlp::train(std::size_t epochSize
+template<class T>
+bool MultiLayerPerceptron<T>::train(std::size_t epochSize
     , std::size_t batchSize
     , ErrorTag errorTag
     , OptimizationTag optimizationTag
-    , const std::vector<Matrix<double>> &trainingInput
-    , const std::vector<Matrix<double>> &trainingOutput
-    , const std::vector<Matrix<double>> &validationInput
-    , const std::vector<Matrix<double>> &validationOutput
-    , const std::vector<Matrix<double>> &testInput
-    , const std::vector<Matrix<double>> &testOutput
+    , const std::vector<Matrix<T>> &trainingInput
+    , const std::vector<Matrix<T>> &trainingOutput
+    , const std::vector<Matrix<T>> &validationInput
+    , const std::vector<Matrix<T>> &validationOutput
+    , const std::vector<Matrix<T>> &testInput
+    , const std::vector<Matrix<T>> &testOutput
     , bool shouldStopEarly)
 {
     if(!checkValidity(epochSize
@@ -74,7 +145,7 @@ bool Mlp::train(std::size_t epochSize
     if(!randomizeParameter())
         return false;
 
-    double prevError{std::numeric_limits<double>::max()};
+    T prevError{std::numeric_limits<T>::max()};
     for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
     {
         std::deque<std::size_t> trainingIndices(trainingInput.size());
@@ -87,12 +158,12 @@ bool Mlp::train(std::size_t epochSize
 
         while(!trainingIndices.empty())
         {
-            std::list<Weight*> weightGradients;
-            std::list<Bias*> biasGradients;
+            std::list<Weight<T>*> weightGradients;
+            std::list<Bias<T>*> biasGradients;
             for(auto &&weight : mWeights)
-                weightGradients.push_back(new Weight{weight->data().row(), weight->data().column()});
+                weightGradients.push_back(new Weight<T>{weight->data().row(), weight->data().column()});
             for(auto &&bias : mBiases)
-                biasGradients.push_back(new Bias{bias->data().column()});
+                biasGradients.push_back(new Bias<T>{bias->data().column()});
 
             for(std::size_t batch{0ull}; batch < batchSize; batch++)
             {
@@ -129,7 +200,7 @@ bool Mlp::train(std::size_t epochSize
                 delete gradient;
         }
 
-        double error{calculateError(validationInput, validationOutput, errorTag)};
+        auto &&error{calculateError(validationInput, validationOutput, errorTag)};
         
         if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
             std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
@@ -146,8 +217,9 @@ bool Mlp::train(std::size_t epochSize
     return true;
 }
 
-bool Mlp::activate(const Matrix<double> &input
-    , Matrix<double> &output)
+template<class T>
+bool MultiLayerPerceptron<T>::activate(const Matrix<T> &input
+    , Matrix<T> &output)
 {
     if(!checkValidity(input))
         return false;
@@ -159,16 +231,17 @@ bool Mlp::activate(const Matrix<double> &input
     return true;
 }
 
-bool Mlp::checkValidity(std::size_t epochSize
+template<class T>
+bool MultiLayerPerceptron<T>::checkValidity(std::size_t epochSize
     , std::size_t batchSize
     , ErrorTag errorTag
     , OptimizationTag optimizationTag
-    , const std::vector<Matrix<double>> &trainingInput
-    , const std::vector<Matrix<double>> &trainingOutput
-    , const std::vector<Matrix<double>> &validationInput
-    , const std::vector<Matrix<double>> &validationOutput
-    , const std::vector<Matrix<double>> &testInput
-    , const std::vector<Matrix<double>> &testOutput) const
+    , const std::vector<Matrix<T>> &trainingInput
+    , const std::vector<Matrix<T>> &trainingOutput
+    , const std::vector<Matrix<T>> &validationInput
+    , const std::vector<Matrix<T>> &validationOutput
+    , const std::vector<Matrix<T>> &testInput
+    , const std::vector<Matrix<T>> &testOutput) const
 {
     if(trainingInput.size() != trainingOutput.size()
         || validationInput.size() != validationOutput.size()
@@ -186,7 +259,8 @@ bool Mlp::checkValidity(std::size_t epochSize
     return true;
 }
 
-bool Mlp::checkValidity(const Matrix<double> &input) const
+template<class T>
+bool MultiLayerPerceptron<T>::checkValidity(const Matrix<T> &input) const
 {
     if(mLayers.empty())
         return activationError("multi-layer perceptron has no layers");
@@ -194,7 +268,8 @@ bool Mlp::checkValidity(const Matrix<double> &input) const
     return true;
 }
 
-bool Mlp::randomizeParameter()
+template<class T>
+bool MultiLayerPerceptron<T>::randomizeParameter()
 {
     auto &&prevLayerIter{mLayers.begin()};
     auto &&layerIter{mLayers.begin()};
@@ -212,7 +287,7 @@ bool Mlp::randomizeParameter()
             case(ActivationTag::SOFTMAX):
             case(ActivationTag::RELU):
             {
-                std::normal_distribution<> dist{0.0, std::sqrt(2.0 / (*prevLayerIter)->output().column())};
+                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*prevLayerIter)->output().column())};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
                     for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
                         (*weightIter)->data()[r][c] = dist(RANDOM.engine());
@@ -232,7 +307,8 @@ bool Mlp::randomizeParameter()
     return true;
 }
 
-bool Mlp::propagate(const Matrix<double> &trainingInput)
+template<class T>
+bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
 {
     auto &&prevLayerIter{mLayers.begin()};
     auto &&nextLayerIter{mLayers.begin()};
@@ -257,10 +333,11 @@ bool Mlp::propagate(const Matrix<double> &trainingInput)
     return true;
 }
 
-bool Mlp::backpropagate(const Matrix<double> &trainingOutput
+template<class T>
+bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
     , ErrorTag errorTag
-    , std::list<Weight*> &weightGradients
-    , std::list<Bias*> &biasGradients)
+    , std::list<Weight<T>*> &weightGradients
+    , std::list<Bias<T>*> &biasGradients)
 {
     // reverse iterators
     auto &&prevLayerIter{mLayers.rbegin()};
@@ -271,13 +348,13 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
     auto &&weightGradientIter{weightGradients.rbegin()};
     auto &&biasGradientIter{biasGradients.rbegin()};
 
-    auto &&derivativeErrorFunction{FUNCTION::derivativeErrorFunction<double>(errorTag)};
-    auto &&derivativeActivationFunction{FUNCTION::derivativeActivationFunction<double>((*nextLayerIter)->activationTag())};
+    auto &&derivativeErrorFunction{FUNCTION::derivativeErrorFunction<T>(errorTag)};
+    auto &&derivativeActivationFunction{FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag())};
 
     // output layer
-    Matrix<double> error{1ull, trainingOutput.column()};
-    Matrix<double> dError{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
-    Matrix<double> dActivation{derivativeActivationFunction((*nextLayerIter)->output())};
+    Matrix<T> error{1ull, trainingOutput.column()};
+    Matrix<T> dError{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
+    Matrix<T> dActivation{derivativeActivationFunction((*nextLayerIter)->output())};
     switch((*nextLayerIter)->activationTag())
     {
         case(ActivationTag::NONE):
@@ -308,7 +385,7 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
             , weightGradientIter++
             , biasGradientIter++)
     {
-        derivativeActivationFunction = FUNCTION::derivativeActivationFunction<double>((*nextLayerIter)->activationTag());
+        derivativeActivationFunction = FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag());
         error = error * ~(*weightIter)->data();
         dActivation = derivativeActivationFunction((*nextLayerIter)->output());
         switch((*nextLayerIter)->activationTag())
@@ -331,28 +408,30 @@ bool Mlp::backpropagate(const Matrix<double> &trainingOutput
     return true;
 }
 
-bool Mlp::calculateAverage(std::size_t batchSize
-    , std::list<Weight*> &weightGradients
-    , std::list<Bias*> &biasGradients)
+template<class T>
+bool MultiLayerPerceptron<T>::calculateAverage(std::size_t batchSize
+    , std::list<Weight<T>*> &weightGradients
+    , std::list<Bias<T>*> &biasGradients)
 {
-    double denominator{static_cast<double>(batchSize)};
+    T denominator{static_cast<T>(batchSize)};
 
     for(auto &&gradient : weightGradients)
-        gradient->data().apply([&](double in){return in / denominator;});
+        gradient->data().apply([&](T in){return in / denominator;});
     for(auto &&gradient : biasGradients)
-        gradient->data().apply([&](double in){return in / denominator;});
+        gradient->data().apply([&](T in){return in / denominator;});
 
     return true;
 }
 
-bool Mlp::updateParameter(OptimizationTag optimizationTag
-    , std::list<Weight*> &weightGradients
-    , std::list<Bias*> &biasGradients)
+template<class T>
+bool MultiLayerPerceptron<T>::updateParameter(OptimizationTag optimizationTag
+    , std::list<Weight<T>*> &weightGradients
+    , std::list<Bias<T>*> &biasGradients)
 {
-    static std::list<Matrix<double>> weightAdamMs{};
-    static std::list<Matrix<double>> biasAdamMs{};
-    static std::list<Matrix<double>> weightAdamVs{};
-    static std::list<Matrix<double>> biasAdamVs{};
+    static std::list<Matrix<T>> weightAdamMs{};
+    static std::list<Matrix<T>> biasAdamMs{};
+    static std::list<Matrix<T>> weightAdamVs{};
+    static std::list<Matrix<T>> biasAdamVs{};
     static bool isInitialized{false};
     if(!isInitialized)
     {
@@ -374,7 +453,7 @@ bool Mlp::updateParameter(OptimizationTag optimizationTag
     }
 
 
-    auto &&optimizationFunction{FUNCTION::optimizationFunction<double>(optimizationTag)};
+    auto &&optimizationFunction{FUNCTION::optimizationFunction<T>(optimizationTag)};
 
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
@@ -440,13 +519,14 @@ bool Mlp::updateParameter(OptimizationTag optimizationTag
     return true;
 }
 
-double Mlp::calculateError(const std::vector<Matrix<double>> &inputs
-    , const std::vector<Matrix<double>> &outputs
+template<class T>
+T MultiLayerPerceptron<T>::calculateError(const std::vector<Matrix<T>> &inputs
+    , const std::vector<Matrix<T>> &outputs
     , ErrorTag errorTag)
 {
-    auto &&errorFunction{FUNCTION::errorFunction<double>(errorTag)};
+    auto &&errorFunction{FUNCTION::errorFunction<T>(errorTag)};
 
-    double error{0.0};
+    T error{0};
 
     for(auto &&inputIter{inputs.begin()}
             , &&outputIter{outputs.begin()};
@@ -461,7 +541,8 @@ double Mlp::calculateError(const std::vector<Matrix<double>> &inputs
     return error;
 }
 
-bool Mlp::trainingError(const std::string &what) const
+template<class T>
+bool MultiLayerPerceptron<T>::trainingError(const std::string &what) const
 {
     std::cerr << "Mlp::trainingError():"
         << "\n    what: " << what
@@ -469,10 +550,13 @@ bool Mlp::trainingError(const std::string &what) const
     return false;
 }
 
-bool Mlp::activationError(const std::string &what) const
+template<class T>
+bool MultiLayerPerceptron<T>::activationError(const std::string &what) const
 {
     std::cerr << "Mlp::activationError():"
         << "\n    what: " << what
         << std::endl;
     return false;
 }
+
+#endif

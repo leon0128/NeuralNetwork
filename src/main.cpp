@@ -2,15 +2,14 @@
 #include <iostream>
 
 #include "matrix/matrix.hpp"
-#include "neural_network/mlp.hpp"
-#include "neural_network/layer.hpp"
+#include "neural_network/multi_layer_perceptron.hpp"
 
 int main(int argc, char **argv)
 {
-    Mlp mlp;
-    mlp.addLayer(new Layer{2ull, ActivationTag::NONE});
-    mlp.addLayer(new Layer{4ull, ActivationTag::SOFTMAX});
-    mlp.addLayer(new Layer{2ull, ActivationTag::SOFTMAX});
+    MultiLayerPerceptron<double> mlp;
+    mlp.addLayer(new Layer<double>{2ull, ActivationTag::NONE});
+    mlp.addLayer(new Layer<double>{4ull, ActivationTag::SOFTMAX});
+    mlp.addLayer(new Layer<double>{2ull, ActivationTag::SOFTMAX});
 
     std::vector<Matrix<double>> trainingInput;
     std::vector<Matrix<double>> trainingOutput;
