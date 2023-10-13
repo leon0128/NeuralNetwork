@@ -54,7 +54,8 @@ private:
         , const std::vector<Matrix<T>> &validationInput
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
-        , const std::vector<Matrix<T>> &testOutput) const;
+        , const std::vector<Matrix<T>> &testOutput
+        , bool shouldStopEarly) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
     bool propagate(const Matrix<T> &trainingInput);
@@ -139,7 +140,8 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
         , validationInput
         , validationOutput
         , testInput
-        , testOutput))
+        , testOutput
+        , shouldStopEarly))
         return false;
 
     if(!randomizeParameter())
@@ -241,20 +243,47 @@ bool MultiLayerPerceptron<T>::checkValidity(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationInput
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
-    , const std::vector<Matrix<T>> &testOutput) const
+    , const std::vector<Matrix<T>> &testOutput
+    , bool shouldStopEarly) const
 {
+    auto &&checkMatrixValidity{[](auto &&vec, auto &&columnSize)
+        -> bool
+        {
+            for(auto &&matrix : vec)
+            {
+                if(matrix.row() != 1ull
+                    || matrix.column() != columnSize)
+                    return false;
+            }
+            return true;
+        }};
+
     if(trainingInput.size() != trainingOutput.size()
         || validationInput.size() != validationOutput.size()
         || testInput.size() != testOutput.size()
-        || trainingInput.empty())
-        return trainingError("data sizes for training is invalid.");
+        || trainingInput.empty()
+        || trainingInput.empty()
+        || validationInput.empty())
+        return trainingError("data size for training is invalid.");
     if(epochSize == 0ull
         || batchSize == 0ull)
-        return trainingError("epoch/batch sizes is invalid.");
+        return trainingError("epoch/batch size is invalid.");
     if(errorTag == ErrorTag::NONE)
         return trainingError("error should be selected.");
     if(mLayers.empty())
         return trainingError("multi-layer perceptron has no layers.");
+
+    if(!checkMatrixValidity(trainingInput, mLayers.front()->input().column())
+        || !checkMatrixValidity(trainingOutput, mLayers.back()->output().column())
+        || !checkMatrixValidity(validationInput, mLayers.front()->input().column())
+        || !checkMatrixValidity(validationOutput, mLayers.back()->output().column())
+        || !checkMatrixValidity(testInput, mLayers.front()->input().column())
+        || !checkMatrixValidity(testOutput, mLayers.back()->output().column()))
+        return trainingError("data's elements does not match layer's io.");
+
+    for(auto &&layer : mLayers)
+        if(layer->input().column() == 0ull)
+            return trainingError("layer has 0 size's input");
 
     return true;
 }
@@ -264,6 +293,13 @@ bool MultiLayerPerceptron<T>::checkValidity(const Matrix<T> &input) const
 {
     if(mLayers.empty())
         return activationError("multi-layer perceptron has no layers");
+    for(auto &&layer : mLayers)
+        if(layer->input().column() == 0ull)
+            return activationError("layer has 0 size's input.");
+
+    if(input.row() != 1ull
+        || input.column() != mLayers.front()->input().column())
+        return activationError("input size does not match layer's input.");
 
     return true;
 }
@@ -544,7 +580,7 @@ T MultiLayerPerceptron<T>::calculateError(const std::vector<Matrix<T>> &inputs
 template<class T>
 bool MultiLayerPerceptron<T>::trainingError(const std::string &what) const
 {
-    std::cerr << "Mlp::trainingError():"
+    std::cerr << "MultiLayerPerceptron::trainingError():"
         << "\n    what: " << what
         << std::endl;
     return false;
@@ -553,7 +589,7 @@ bool MultiLayerPerceptron<T>::trainingError(const std::string &what) const
 template<class T>
 bool MultiLayerPerceptron<T>::activationError(const std::string &what) const
 {
-    std::cerr << "Mlp::activationError():"
+    std::cerr << "MultiLayerPerceptron::activationError():"
         << "\n    what: " << what
         << std::endl;
     return false;
