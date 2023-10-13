@@ -9,8 +9,8 @@ int main(int argc, char **argv)
 {
     Mlp mlp;
     mlp.addLayer(new Layer{2ull, ActivationTag::NONE});
-    mlp.addLayer(new Layer{4ull, ActivationTag::ELU});
-    mlp.addLayer(new Layer{2ull, ActivationTag::ELU});
+    mlp.addLayer(new Layer{4ull, ActivationTag::SOFTMAX});
+    mlp.addLayer(new Layer{2ull, ActivationTag::SOFTMAX});
 
     std::vector<Matrix<double>> trainingInput;
     std::vector<Matrix<double>> trainingOutput;
@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     testInput = trainingInput;
     testOutput = trainingOutput;
  
-    mlp.train(100000ull
+    mlp.train(100'000ull
         , 4ull
         , ErrorTag::CATEGORICAL_CROSS_ENTROPY
         , OptimizationTag::ADAM
@@ -69,7 +69,7 @@ int main(int argc, char **argv)
         , validationOutput
         , testInput
         , testOutput
-        , false);
+        , true);
 
     Matrix<double> result;
     mlp.activate(inputA, result);

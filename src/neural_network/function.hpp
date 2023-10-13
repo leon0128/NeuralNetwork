@@ -26,9 +26,7 @@ inline Matrix<double> adamV{};
 
 template<class T>
 inline Matrix<T> activationNone(const Matrix<T> &input)
-{
-    return input;
-}
+    {return input;}
 
 template<class T>
 inline Matrix<T> elu(const Matrix<T> &input)
@@ -71,6 +69,7 @@ inline T mse(const Matrix<T> &teacher, const Matrix<T> &output)
     for(std::size_t r{0ull}; r < teacher.row(); r++)
         for(std::size_t c{0ull}; c < teacher.column(); c++)
             error += std::pow(teacher[r][c] - output[r][c], T{2});
+
     return error / T{2};
 }
 
