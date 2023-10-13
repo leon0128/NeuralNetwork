@@ -131,7 +131,7 @@ bool Mlp::train(std::size_t epochSize
 
         double error{calculateError(validationInput, validationOutput, errorTag)};
         
-        if((epoch + 1ull) % (epochSize / 20ull) == 0)
+        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
             std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
         if(shouldStopEarly && error > prevError)
         {
