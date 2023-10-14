@@ -71,13 +71,13 @@ int main(int argc, char **argv)
         , true);
 
     Matrix<double> result;
-    mlp.activate(inputA, result);
+    mlp.predict(inputA, result);
     std::cout << inputA << ": " << result << std::endl;
-    mlp.activate(inputB, result);
+    mlp.predict(inputB, result);
     std::cout << inputB << ": " << result << std::endl;
-    mlp.activate(inputC, result);
+    mlp.predict(inputC, result);
     std::cout << inputC << ": " << result << std::endl;
-    mlp.activate(inputD, result);
+    mlp.predict(inputD, result);
     std::cout << inputD << ": " << result << std::endl;
 
     return 0;

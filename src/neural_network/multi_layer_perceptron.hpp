@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <limits>
 #include <memory>
+#include <filesystem>
+#include <fstream>
 
 #include "matrix/matrix.hpp"
 #include "random.hpp"
@@ -42,8 +44,11 @@ public:
         , const std::vector<Matrix<T>> &testOutput
         , bool shouldStopEarly = true);
 
-    bool activate(const Matrix<T> &input
+    bool predict(const Matrix<T> &input
         , Matrix<T> &output);
+
+    bool read(const std::filesystem::path &filepath);
+    bool write(const std::filesystem::path &filepath) const;
 
 private:
     bool checkValidity(std::size_t epochSize
@@ -210,7 +215,7 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::activate(const Matrix<T> &input
+bool MultiLayerPerceptron<T>::predict(const Matrix<T> &input
     , Matrix<T> &output)
 {
     if(!checkValidity(input))
@@ -220,6 +225,18 @@ bool MultiLayerPerceptron<T>::activate(const Matrix<T> &input
         return false;
     
     output = mLayers.back()->output();
+    return true;
+}
+
+template<class T>
+bool MultiLayerPerceptron<T>::read(const std::filesystem::path &filepath)
+{
+    return true;
+}
+
+template<class T>
+bool MultiLayerPerceptron<T>::write(const std::filesystem::path &filepath) const
+{
     return true;
 }
 
