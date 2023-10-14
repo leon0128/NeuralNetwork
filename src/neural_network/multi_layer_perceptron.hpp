@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <limits>
+#include <memory>
 
 #include "matrix/matrix.hpp"
 #include "random.hpp"
@@ -58,17 +59,19 @@ private:
         , bool shouldStopEarly) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
+    std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
+        , std::size_t batchSize) const;
     bool propagate(const Matrix<T> &trainingInput);
     bool backpropagate(const Matrix<T> &trainingOutput
         , ErrorTag errorTag
-        , std::list<Weight<T>*> &weightGradients
-        , std::list<Bias<T>*> &biasGradients);
+        , std::list<std::shared_ptr<Weight<T>>> &weightGradients
+        , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
     bool calculateAverage(std::size_t batchSize
-        , std::list<Weight<T>*> &weightGradients
-        , std::list<Bias<T>*> &biasGradients);
+        , std::list<std::shared_ptr<Weight<T>>> &weightGradients
+        , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
     bool updateParameter(OptimizationTag optimizationTag
-        , std::list<Weight<T>*> &weightGradients
-        , std::list<Bias<T>*> &biasGradients);
+        , std::list<std::shared_ptr<Weight<T>>> &weightGradients
+        , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
@@ -148,45 +151,31 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
         return false;
 
     T prevError{std::numeric_limits<T>::max()};
+    std::list<std::shared_ptr<Weight<T>>> weightGradients;
+    std::list<std::shared_ptr<Bias<T>>> biasGradients;
+    for(auto &&weight : mWeights)
+        weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
+    for(auto &&bias : mBiases)
+        biasGradients.emplace_back(new Bias<T>{bias->data().column()});
+
     for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
     {
-        std::deque<std::size_t> trainingIndices(trainingInput.size());
-        std::iota(trainingIndices.begin()
-            , trainingIndices.end()
-            , 0ull);
-        std::shuffle(trainingIndices.begin()
-            , trainingIndices.end()
-            , RANDOM.engine());
-
-        while(!trainingIndices.empty())
+        for(auto &&trainingIndices{createTrainingIndices(trainingInput.size(), batchSize)};
+            !trainingIndices.empty();
+            trainingIndices.pop_front())
         {
-            std::list<Weight<T>*> weightGradients;
-            std::list<Bias<T>*> biasGradients;
-            for(auto &&weight : mWeights)
-                weightGradients.push_back(new Weight<T>{weight->data().row(), weight->data().column()});
-            for(auto &&bias : mBiases)
-                biasGradients.push_back(new Bias<T>{bias->data().column()});
-
-            for(std::size_t batch{0ull}; batch < batchSize; batch++)
-            {
-                std::size_t trainingIndex{0ull};
-                if(!trainingIndices.empty())
-                {
-                    trainingIndex = trainingIndices.front();
-                    trainingIndices.pop_front();
-                }
-                else
-                    trainingIndex = RANDOM(trainingInput.size());
-
-                if(!propagate(trainingInput[trainingIndex]))
-                    return false;
-                if(!backpropagate(trainingOutput[trainingIndex]
-                    , errorTag
-                    , weightGradients
-                    , biasGradients))
-                    return false;
-            }
-
+            std::size_t trainingIndex{trainingIndices.front()};
+            if(!propagate(trainingInput[trainingIndex]))
+                return false;
+            if(!backpropagate(trainingOutput[trainingIndex]
+                , errorTag
+                , weightGradients
+                , biasGradients))
+                return false;
+            
+            if((trainingIndices.size() - 1ull) % batchSize != 0ull)
+                continue;
+            
             if(!calculateAverage(batchSize
                 , weightGradients
                 , biasGradients))
@@ -195,15 +184,14 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
                 , weightGradients
                 , biasGradients))
                 return false;
-
+            
             for(auto &&gradient : weightGradients)
-                delete gradient;
+                gradient->data().apply([](T in){return T{0};});
             for(auto &&gradient : biasGradients)
-                delete gradient;
+                gradient->data().apply([](T in){return T{0};});
         }
 
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
-        
         if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
             std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
         if(shouldStopEarly && error > prevError)
@@ -344,6 +332,24 @@ bool MultiLayerPerceptron<T>::randomizeParameter()
 }
 
 template<class T>
+std::deque<std::size_t> MultiLayerPerceptron<T>::createTrainingIndices(std::size_t trainingSize
+    , std::size_t batchSize) const
+{
+    std::deque<std::size_t> indices(trainingSize);
+    std::iota(indices.begin()
+        , indices.end()
+        , 0ull);
+    std::shuffle(indices.begin()
+        , indices.end()
+        , RANDOM.engine());
+
+    for(std::size_t i{0ull}, size{(batchSize - trainingSize % batchSize) % batchSize}; i < size; i++)
+        indices.push_back(RANDOM(trainingSize));
+
+    return indices;
+}
+
+template<class T>
 bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
 {
     auto &&prevLayerIter{mLayers.begin()};
@@ -372,8 +378,8 @@ bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
 template<class T>
 bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
     , ErrorTag errorTag
-    , std::list<Weight<T>*> &weightGradients
-    , std::list<Bias<T>*> &biasGradients)
+    , std::list<std::shared_ptr<Weight<T>>> &weightGradients
+    , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
     // reverse iterators
     auto &&prevLayerIter{mLayers.rbegin()};
@@ -446,8 +452,8 @@ bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
 
 template<class T>
 bool MultiLayerPerceptron<T>::calculateAverage(std::size_t batchSize
-    , std::list<Weight<T>*> &weightGradients
-    , std::list<Bias<T>*> &biasGradients)
+    , std::list<std::shared_ptr<Weight<T>>> &weightGradients
+    , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
     T denominator{static_cast<T>(batchSize)};
 
@@ -461,8 +467,8 @@ bool MultiLayerPerceptron<T>::calculateAverage(std::size_t batchSize
 
 template<class T>
 bool MultiLayerPerceptron<T>::updateParameter(OptimizationTag optimizationTag
-    , std::list<Weight<T>*> &weightGradients
-    , std::list<Bias<T>*> &biasGradients)
+    , std::list<std::shared_ptr<Weight<T>>> &weightGradients
+    , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
     static std::list<Matrix<T>> weightAdamMs{};
     static std::list<Matrix<T>> biasAdamMs{};
