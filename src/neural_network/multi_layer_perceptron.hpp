@@ -204,6 +204,8 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
         prevError = error;
     }
 
+    std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
+
     return true;
 }
 
