@@ -14,6 +14,7 @@
 #include <memory>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 
 #include "matrix/matrix.hpp"
 #include "random.hpp"
@@ -47,8 +48,8 @@ public:
     bool predict(const Matrix<T> &input
         , Matrix<T> &output);
 
-    bool read(const std::filesystem::path &filepath);
     bool write(const std::filesystem::path &filepath) const;
+    bool read(const std::filesystem::path &filepath);
 
 private:
     bool checkValidity(std::size_t epochSize
@@ -81,8 +82,19 @@ private:
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
 
+    template<class U>
+    void writeValue(std::ofstream &stream
+        , U &&value) const;
+    template<class U>
+    U readValue(std::ifstream &stream) const;
+
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
+    bool openingFileError(const std::filesystem::path &filepath) const;
+    bool writingError(const std::string &what
+        , const std::filesystem::path &filepath) const;
+    bool readingError(const std::string &what
+        , const std::filesystem::path &filepath) const;
 
     std::list<Layer<T>*> mLayers;
     std::list<Weight<T>*> mWeights;
@@ -229,14 +241,83 @@ bool MultiLayerPerceptron<T>::predict(const Matrix<T> &input
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::read(const std::filesystem::path &filepath)
+bool MultiLayerPerceptron<T>::write(const std::filesystem::path &filepath) const
 {
+    if(mLayers.empty())
+        return writingError("MultiLayerPerceptron has no layer.", filepath);
+
+    std::ofstream stream{filepath, std::ios::out | std::ios::binary};
+    if(!stream.is_open())
+        return openingFileError(filepath);
+
+    writeValue(stream, mLayers.size());
+    for(auto &&layer : mLayers)
+    {
+        writeValue(stream, layer->input().column());
+        writeValue(stream, layer->activationTag());
+    }
+
+    for(auto &&weight : mWeights)
+        for(std::size_t r{0ull}; r < weight->data().row(); r++)
+            for(std::size_t c{0ull}; c < weight->data().column(); c++)
+                writeValue(stream, weight->data()[r][c]);
+    for(auto &&bias : mBiases)
+        for(std::size_t c{0ull}; c < bias->data().column(); c++)
+            writeValue(stream, bias->data()[0ull][c]);
+
+    if(!stream)
+        return writingError("failed to write parameters", filepath);
+    
     return true;
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::write(const std::filesystem::path &filepath) const
+bool MultiLayerPerceptron<T>::read(const std::filesystem::path &filepath)
 {
+    if(!mLayers.empty())
+        return readingError("MultiLayerPerceptron has a layers already.", filepath);
+
+    std::ifstream stream{filepath, std::ios::in | std::ios::binary};
+    if(!stream.is_open())
+        return openingFileError(filepath);
+
+    for(std::size_t i{0ull}, numLayer{readValue<std::size_t>(stream)}; i < numLayer; i++)
+    {
+        std::size_t layerSize{readValue<std::size_t>(stream)};
+        ActivationTag tag{readValue<ActivationTag>(stream)};
+        mLayers.push_back(new Layer<T>{layerSize, tag});
+    }
+
+    if(mLayers.empty())
+        return readingError("multi layer perceptron has no layer.", filepath);
+
+    for(auto &&prevIter{mLayers.begin()}
+            , nextIter{std::next(mLayers.begin())};
+        nextIter != mLayers.end();
+        prevIter++
+            , nextIter++)
+    {
+        Weight<T> *weight{new Weight<T>{(*prevIter)->input().column()
+            , (*nextIter)->input().column()}};
+        for(std::size_t r{0ull}; r < weight->data().row(); r++)
+            for(std::size_t c{0ull}; c < weight->data().column(); c++)
+                weight->data()[r][c] = readValue<T>(stream);
+        mWeights.push_back(weight);
+    }
+
+    for(auto &&nextIter{std::next(mLayers.begin())};
+        nextIter != mLayers.end();
+        nextIter++)
+    {
+        Bias<T> *bias{new Bias<T>{(*nextIter)->input().column()}};
+        for(std::size_t c{0ull}; c < bias->data().column(); c++)
+            bias->data()[0ull][c] = readValue<T>(stream);
+        mBiases.push_back(bias);
+    }
+
+    if(!stream)
+        return readingError("failed to read parameters.", filepath);
+
     return true;
 }
 
@@ -603,6 +684,31 @@ T MultiLayerPerceptron<T>::calculateError(const std::vector<Matrix<T>> &inputs
 }
 
 template<class T>
+template<class U>
+void MultiLayerPerceptron<T>::writeValue(std::ofstream &stream
+    , U &&value) const
+{
+    static const char padding[256]{0};
+
+    stream.write(reinterpret_cast<const char*>(&padding)
+        , (alignof(U) - stream.tellp() % alignof(U)) % alignof(U));
+    stream.write(reinterpret_cast<const char*>(&value)
+        , sizeof(U));
+}
+
+template<class T>
+template<class U>
+U MultiLayerPerceptron<T>::readValue(std::ifstream &stream) const
+{
+    U value;
+    stream.seekg((alignof(U) - stream.tellg() % alignof(U)) % alignof(U)
+        , std::ios_base::cur);
+    stream.read(reinterpret_cast<char*>(&value)
+        , sizeof(U));
+    return value;
+}
+
+template<class T>
 bool MultiLayerPerceptron<T>::trainingError(const std::string &what) const
 {
     std::cerr << "MultiLayerPerceptron::trainingError():"
@@ -617,6 +723,35 @@ bool MultiLayerPerceptron<T>::activationError(const std::string &what) const
     std::cerr << "MultiLayerPerceptron::activationError():"
         << "\n    what: " << what
         << std::endl;
+    return false;
+}
+
+template<class T>
+bool MultiLayerPerceptron<T>::openingFileError(const std::filesystem::path &filepath) const
+{
+    std::cerr << "MultiLayerPerceptron::openingFileError():\n"
+        "    what: failed to open specific file.\n"
+        "    file: " << filepath.string() << std::endl;
+    return false;
+}
+
+template<class T>
+bool MultiLayerPerceptron<T>::writingError(const std::string &what
+    , const std::filesystem::path &filepath) const
+{
+    std::cerr << "MultiLayerPerceptron::writingError():\n"
+        "    what: " << what
+        << "\n    file: " << filepath.string() << std::endl;
+    return false;
+}
+
+template<class T>
+bool MultiLayerPerceptron<T>::readingError(const std::string &what
+    , const std::filesystem::path &filepath) const
+{
+    std::cerr << "MultiLayerPerceptron::readingError():\n"
+        "    what: " << what
+        << "\n    file: " << filepath.string() << std::endl;
     return false;
 }
 

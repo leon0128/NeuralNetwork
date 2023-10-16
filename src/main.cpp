@@ -58,7 +58,7 @@ int main(int argc, char **argv)
     testInput = trainingInput;
     testOutput = trainingOutput;
  
-    mlp.train(1'000'000ull
+    mlp.train(1'000ull
         , 4ull
         , ErrorTag::CATEGORICAL_CROSS_ENTROPY
         , OptimizationTag::ADAM
@@ -78,6 +78,18 @@ int main(int argc, char **argv)
     mlp.predict(inputC, result);
     std::cout << inputC << ": " << result << std::endl;
     mlp.predict(inputD, result);
+    std::cout << inputD << ": " << result << std::endl;
+
+    mlp.write("test.out");
+    MultiLayerPerceptron<double> newMlp;
+    newMlp.read("test.out");
+    newMlp.predict(inputA, result);
+    std::cout << inputA << ": " << result << std::endl;
+    newMlp.predict(inputB, result);
+    std::cout << inputB << ": " << result << std::endl;
+    newMlp.predict(inputC, result);
+    std::cout << inputC << ": " << result << std::endl;
+    newMlp.predict(inputD, result);
     std::cout << inputD << ": " << result << std::endl;
 
     return 0;
