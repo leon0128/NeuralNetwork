@@ -1,6 +1,9 @@
 #ifndef NEURAL_NETWORK_TAG_HPP
 #define NEURAL_NETWORK_TAG_HPP
 
+namespace NEURAL_NETWORK
+{
+
 enum class ErrorTag
 {
     NONE
@@ -23,5 +26,7 @@ enum class OptimizationTag
     NONE
     , ADAM
 };
+
+}
 
 #endif

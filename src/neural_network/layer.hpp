@@ -5,6 +5,9 @@
 #include "function.hpp"
 #include "tag.hpp"
 
+namespace NEURAL_NETWORK
+{
+
 template<class T>
 class Layer
 {
@@ -49,6 +52,8 @@ bool Layer<T>::activate()
     auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
     output() = activationFunction(input());
     return true;
+}
+
 }
 
 #endif

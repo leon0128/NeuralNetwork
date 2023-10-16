@@ -3,6 +3,9 @@
 
 #include "matrix/matrix.hpp"
 
+namespace NEURAL_NETWORK
+{
+
 template<class T>
 class ParameterBase
 {
@@ -30,6 +33,8 @@ ParameterBase<T>::ParameterBase(std::size_t row
 template<class T>
 ParameterBase<T>::~ParameterBase()
 {
+}
+
 }
 
 #endif

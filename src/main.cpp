@@ -6,6 +6,8 @@
 
 int main(int argc, char **argv)
 {
+    using namespace NEURAL_NETWORK;
+
     MultiLayerPerceptron<double> mlp;
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::NONE});
     mlp.addLayer(new Layer<double>{4ull, ActivationTag::SOFTMAX});

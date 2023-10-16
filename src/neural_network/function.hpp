@@ -10,6 +10,9 @@
 #include "matrix/matrix.hpp"
 #include "tag.hpp"
 
+namespace NEURAL_NETWORK
+{
+
 namespace FUNCTION
 {
 
@@ -280,6 +283,8 @@ inline std::function<Matrix<T>(const Matrix<T>&, const Matrix<T>&)> derivativeEr
     }
 
     return {};
+}
+
 }
 
 }

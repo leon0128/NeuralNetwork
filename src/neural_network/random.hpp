@@ -3,6 +3,9 @@
 
 #include <random>
 
+namespace NEURAL_NETWORK
+{
+
 template<class E = std::mt19937_64
     , class S = std::random_device>
 class Random
@@ -52,5 +55,7 @@ private:
 };
 
 inline static Random RANDOM{};
+
+}
 
 #endif

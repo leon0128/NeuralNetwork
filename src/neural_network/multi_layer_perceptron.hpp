@@ -24,6 +24,9 @@
 #include "function.hpp"
 #include "tag.hpp"
 
+namespace NEURAL_NETWORK
+{
+
 template<class T>
 class MultiLayerPerceptron
 {
@@ -754,6 +757,8 @@ bool MultiLayerPerceptron<T>::readingError(const std::string &what
         "    what: " << what
         << "\n    file: " << filepath.string() << std::endl;
     return false;
+}
+
 }
 
 #endif

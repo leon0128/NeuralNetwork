@@ -3,6 +3,9 @@
 
 #include "parameter_base.hpp"
 
+namespace NEURAL_NETWORK
+{
+
 template<class T>
 class Weight : public ParameterBase<T>
 {
@@ -16,6 +19,8 @@ Weight<T>::Weight(std::size_t row
     , std::size_t column)
     : ParameterBase<T>{row, column}
 {
+}
+
 }
 
 #endif

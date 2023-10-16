@@ -3,6 +3,9 @@
 
 #include "parameter_base.hpp"
 
+namespace NEURAL_NETWORK
+{
+
 template<class T>
 class Bias : public ParameterBase<T>
 {
@@ -14,6 +17,8 @@ template<class T>
 Bias<T>::Bias(std::size_t column)
     : ParameterBase<T>{1ull, column}
 {
+}
+
 }
 
 #endif
