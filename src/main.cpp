@@ -2,13 +2,13 @@
 #include <iostream>
 
 #include "matrix/matrix.hpp"
-#include "neural_network/multi_layer_perceptron.hpp"
+#include "neural_network/neural_network.hpp"
 
 int main(int argc, char **argv)
 {
     using namespace NEURAL_NETWORK;
 
-    MultiLayerPerceptron<double> mlp;
+    NeuralNetwork<double> mlp;
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::NONE});
     mlp.addLayer(new Layer<double>{4ull, ActivationTag::SOFTMAX});
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::SOFTMAX});
@@ -82,9 +82,9 @@ int main(int argc, char **argv)
     mlp.predict(inputD, result);
     std::cout << inputD << ": " << result << std::endl;
 
-    mlp.write("test.out");
-    MultiLayerPerceptron<double> newMlp;
-    newMlp.read("test.out");
+    mlp.save("test.out");
+    NeuralNetwork<double> newMlp;
+    newMlp.load("test.out");
     newMlp.predict(inputA, result);
     std::cout << inputA << ": " << result << std::endl;
     newMlp.predict(inputB, result);

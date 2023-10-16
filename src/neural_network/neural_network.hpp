@@ -1,5 +1,5 @@
-#ifndef NEURAL_NETWORK_MULTI_LAYER_PERCEPTRON_HPP
-#define NEURAL_NETWORK_MULTI_LAYER_PERCEPTRON_HPP
+#ifndef NEURAL_NETWORK_NEURAL_NETWORK_HPP
+#define NEURAL_NETWORK_NEURAL_NETWORK_HPP
 
 #include <vector>
 #include <list>
@@ -28,11 +28,11 @@ namespace NEURAL_NETWORK
 {
 
 template<class T>
-class MultiLayerPerceptron
+class NeuralNetwork
 {
 public:
-    MultiLayerPerceptron();
-    ~MultiLayerPerceptron();
+    NeuralNetwork();
+    ~NeuralNetwork();
 
     void addLayer(Layer<T> *layer);
     
@@ -46,13 +46,13 @@ public:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
-        , bool shouldStopEarly = true);
+        , std::size_t earlyStopping = 5ull);
 
     bool predict(const Matrix<T> &input
         , Matrix<T> &output);
 
-    bool write(const std::filesystem::path &filepath) const;
-    bool read(const std::filesystem::path &filepath);
+    bool save(const std::filesystem::path &filepath) const;
+    bool load(const std::filesystem::path &filepath);
 
 private:
     bool checkValidity(std::size_t epochSize
@@ -65,7 +65,7 @@ private:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
-        , bool shouldStopEarly) const;
+        , std::size_t earlyStopping) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
@@ -105,7 +105,7 @@ private:
 };
 
 template<class T>
-MultiLayerPerceptron<T>::MultiLayerPerceptron()
+NeuralNetwork<T>::NeuralNetwork()
     : mLayers{}
     , mWeights{}
     , mBiases{}
@@ -113,7 +113,7 @@ MultiLayerPerceptron<T>::MultiLayerPerceptron()
 }
 
 template<class T>
-MultiLayerPerceptron<T>::~MultiLayerPerceptron()
+NeuralNetwork<T>::~NeuralNetwork()
 {
     for(auto &&layer : mLayers)
         delete layer;
@@ -124,7 +124,7 @@ MultiLayerPerceptron<T>::~MultiLayerPerceptron()
 }
 
 template<class T>
-void MultiLayerPerceptron<T>::addLayer(Layer<T> *layer)
+void NeuralNetwork<T>::addLayer(Layer<T> *layer)
 {
     // if layer is not input layer,
     //  weight and bias is created.
@@ -142,7 +142,7 @@ void MultiLayerPerceptron<T>::addLayer(Layer<T> *layer)
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::train(std::size_t epochSize
+bool NeuralNetwork<T>::train(std::size_t epochSize
     , std::size_t batchSize
     , ErrorTag errorTag
     , OptimizationTag optimizationTag
@@ -152,7 +152,7 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
-    , bool shouldStopEarly)
+    , std::size_t earlyStopping)
 {
     if(!checkValidity(epochSize
         , batchSize
@@ -164,13 +164,14 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
         , validationOutput
         , testInput
         , testOutput
-        , shouldStopEarly))
+        , earlyStopping))
         return false;
 
     if(!randomizeParameter())
         return false;
 
-    T prevError{std::numeric_limits<T>::max()};
+    T minError{std::numeric_limits<T>::max()};
+    std::size_t stoppingCount{0ull};
     std::list<std::shared_ptr<Weight<T>>> weightGradients;
     std::list<std::shared_ptr<Bias<T>>> biasGradients;
     for(auto &&weight : mWeights)
@@ -214,14 +215,18 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
         if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
             std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
-        if(shouldStopEarly && error > prevError)
+
+        stoppingCount
+            = error < minError
+                ? (minError = error, 0ull) // assign and return 0
+                : stoppingCount + 1ull;
+
+        if(stoppingCount == earlyStopping)
         {
             std::cout << "early stopping has been activated."
                 << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
             break;
         }
-
-        prevError = error;
     }
 
     std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
@@ -230,7 +235,7 @@ bool MultiLayerPerceptron<T>::train(std::size_t epochSize
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::predict(const Matrix<T> &input
+bool NeuralNetwork<T>::predict(const Matrix<T> &input
     , Matrix<T> &output)
 {
     if(!checkValidity(input))
@@ -244,10 +249,10 @@ bool MultiLayerPerceptron<T>::predict(const Matrix<T> &input
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::write(const std::filesystem::path &filepath) const
+bool NeuralNetwork<T>::save(const std::filesystem::path &filepath) const
 {
     if(mLayers.empty())
-        return writingError("MultiLayerPerceptron has no layer.", filepath);
+        return writingError("NeuralNetwork has no layer.", filepath);
 
     std::ofstream stream{filepath, std::ios::out | std::ios::binary};
     if(!stream.is_open())
@@ -275,10 +280,10 @@ bool MultiLayerPerceptron<T>::write(const std::filesystem::path &filepath) const
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::read(const std::filesystem::path &filepath)
+bool NeuralNetwork<T>::load(const std::filesystem::path &filepath)
 {
     if(!mLayers.empty())
-        return readingError("MultiLayerPerceptron has a layers already.", filepath);
+        return readingError("NeuralNetwork has a layers already.", filepath);
 
     std::ifstream stream{filepath, std::ios::in | std::ios::binary};
     if(!stream.is_open())
@@ -325,7 +330,7 @@ bool MultiLayerPerceptron<T>::read(const std::filesystem::path &filepath)
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::checkValidity(std::size_t epochSize
+bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
     , std::size_t batchSize
     , ErrorTag errorTag
     , OptimizationTag optimizationTag
@@ -335,7 +340,7 @@ bool MultiLayerPerceptron<T>::checkValidity(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
-    , bool shouldStopEarly) const
+    , std::size_t earlyStopping) const
 {
     auto &&checkMatrixValidity{[](auto &&vec, auto &&columnSize)
         -> bool
@@ -372,6 +377,9 @@ bool MultiLayerPerceptron<T>::checkValidity(std::size_t epochSize
         || !checkMatrixValidity(testOutput, mLayers.back()->output().column()))
         return trainingError("data's elements does not match layer's io.");
 
+    if(earlyStopping == 0ull)
+        return trainingError("condition of early stopping is invalid.");
+
     for(auto &&layer : mLayers)
         if(layer->input().column() == 0ull)
             return trainingError("layer has 0 size's input");
@@ -380,7 +388,7 @@ bool MultiLayerPerceptron<T>::checkValidity(std::size_t epochSize
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::checkValidity(const Matrix<T> &input) const
+bool NeuralNetwork<T>::checkValidity(const Matrix<T> &input) const
 {
     if(mLayers.empty())
         return activationError("multi-layer perceptron has no layers");
@@ -396,7 +404,7 @@ bool MultiLayerPerceptron<T>::checkValidity(const Matrix<T> &input) const
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::randomizeParameter()
+bool NeuralNetwork<T>::randomizeParameter()
 {
     auto &&prevLayerIter{mLayers.begin()};
     auto &&layerIter{std::next(mLayers.begin())};
@@ -433,7 +441,7 @@ bool MultiLayerPerceptron<T>::randomizeParameter()
 }
 
 template<class T>
-std::deque<std::size_t> MultiLayerPerceptron<T>::createTrainingIndices(std::size_t trainingSize
+std::deque<std::size_t> NeuralNetwork<T>::createTrainingIndices(std::size_t trainingSize
     , std::size_t batchSize) const
 {
     std::deque<std::size_t> indices(trainingSize);
@@ -451,7 +459,7 @@ std::deque<std::size_t> MultiLayerPerceptron<T>::createTrainingIndices(std::size
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
+bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput)
 {
     auto &&prevLayerIter{mLayers.begin()};
     auto &&nextLayerIter{std::next(mLayers.begin())};
@@ -481,7 +489,7 @@ bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
+bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
     , ErrorTag errorTag
     , std::list<std::shared_ptr<Weight<T>>> &weightGradients
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
@@ -555,7 +563,7 @@ bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::calculateAverage(std::size_t batchSize
+bool NeuralNetwork<T>::calculateAverage(std::size_t batchSize
     , std::list<std::shared_ptr<Weight<T>>> &weightGradients
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
@@ -570,7 +578,7 @@ bool MultiLayerPerceptron<T>::calculateAverage(std::size_t batchSize
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::updateParameter(OptimizationTag optimizationTag
+bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
     , std::list<std::shared_ptr<Weight<T>>> &weightGradients
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
@@ -666,7 +674,7 @@ bool MultiLayerPerceptron<T>::updateParameter(OptimizationTag optimizationTag
 }
 
 template<class T>
-T MultiLayerPerceptron<T>::calculateError(const std::vector<Matrix<T>> &inputs
+T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
     , const std::vector<Matrix<T>> &outputs
     , ErrorTag errorTag)
 {
@@ -689,7 +697,7 @@ T MultiLayerPerceptron<T>::calculateError(const std::vector<Matrix<T>> &inputs
 
 template<class T>
 template<class U>
-void MultiLayerPerceptron<T>::writeValue(std::ofstream &stream
+void NeuralNetwork<T>::writeValue(std::ofstream &stream
     , U &&value) const
 {
     static const char padding[256]{0};
@@ -702,7 +710,7 @@ void MultiLayerPerceptron<T>::writeValue(std::ofstream &stream
 
 template<class T>
 template<class U>
-U MultiLayerPerceptron<T>::readValue(std::ifstream &stream) const
+U NeuralNetwork<T>::readValue(std::ifstream &stream) const
 {
     U value;
     stream.seekg((alignof(U) - stream.tellg() % alignof(U)) % alignof(U)
@@ -713,47 +721,47 @@ U MultiLayerPerceptron<T>::readValue(std::ifstream &stream) const
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::trainingError(const std::string &what) const
+bool NeuralNetwork<T>::trainingError(const std::string &what) const
 {
-    std::cerr << "MultiLayerPerceptron::trainingError():"
+    std::cerr << "NeuralNetwork::trainingError():"
         << "\n    what: " << what
         << std::endl;
     return false;
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::activationError(const std::string &what) const
+bool NeuralNetwork<T>::activationError(const std::string &what) const
 {
-    std::cerr << "MultiLayerPerceptron::activationError():"
+    std::cerr << "NeuralNetwork::activationError():"
         << "\n    what: " << what
         << std::endl;
     return false;
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::openingFileError(const std::filesystem::path &filepath) const
+bool NeuralNetwork<T>::openingFileError(const std::filesystem::path &filepath) const
 {
-    std::cerr << "MultiLayerPerceptron::openingFileError():\n"
+    std::cerr << "NeuralNetwork::openingFileError():\n"
         "    what: failed to open specific file.\n"
         "    file: " << filepath.string() << std::endl;
     return false;
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::writingError(const std::string &what
+bool NeuralNetwork<T>::writingError(const std::string &what
     , const std::filesystem::path &filepath) const
 {
-    std::cerr << "MultiLayerPerceptron::writingError():\n"
+    std::cerr << "NeuralNetwork::writingError():\n"
         "    what: " << what
         << "\n    file: " << filepath.string() << std::endl;
     return false;
 }
 
 template<class T>
-bool MultiLayerPerceptron<T>::readingError(const std::string &what
+bool NeuralNetwork<T>::readingError(const std::string &what
     , const std::filesystem::path &filepath) const
 {
-    std::cerr << "MultiLayerPerceptron::readingError():\n"
+    std::cerr << "NeuralNetwork::readingError():\n"
         "    what: " << what
         << "\n    file: " << filepath.string() << std::endl;
     return false;
