@@ -396,12 +396,15 @@ template<class T>
 bool MultiLayerPerceptron<T>::randomizeParameter()
 {
     auto &&prevLayerIter{mLayers.begin()};
-    auto &&layerIter{mLayers.begin()};
-    layerIter++;
+    auto &&layerIter{std::next(mLayers.begin())};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
-
-    while(layerIter != mLayers.end())
+    for(;
+        layerIter != mLayers.end();
+        prevLayerIter++
+            , layerIter++
+            , weightIter++
+            , biasIter++)
     {
         switch((*layerIter)->activationTag())
         {
@@ -421,11 +424,6 @@ bool MultiLayerPerceptron<T>::randomizeParameter()
                 break;
             }
         }
-
-        prevLayerIter++;
-        layerIter++;
-        weightIter++;
-        biasIter++;
     }
     
     return true;
@@ -453,8 +451,7 @@ template<class T>
 bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
 {
     auto &&prevLayerIter{mLayers.begin()};
-    auto &&nextLayerIter{mLayers.begin()};
-    nextLayerIter++;
+    auto &&nextLayerIter{std::next(mLayers.begin())};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
 
@@ -464,7 +461,12 @@ bool MultiLayerPerceptron<T>::propagate(const Matrix<T> &trainingInput)
         return false;
     
     // others
-    for(; nextLayerIter != mLayers.end(); prevLayerIter++, nextLayerIter++, weightIter++, biasIter++)
+    for(;
+        nextLayerIter != mLayers.end();
+        prevLayerIter++
+            , nextLayerIter++
+            , weightIter++
+            , biasIter++)
     {
         (*nextLayerIter)->input((*prevLayerIter)->output() * (*weightIter)->data());
         (*nextLayerIter)->input() += (*biasIter)->data();
@@ -482,8 +484,7 @@ bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
     // reverse iterators
-    auto &&prevLayerIter{mLayers.rbegin()};
-    prevLayerIter++;
+    auto &&prevLayerIter{std::next(mLayers.rbegin())};
     auto &&nextLayerIter{mLayers.rbegin()};
     auto &&weightIter{mWeights.rbegin()};
     auto &&biasIter{mBiases.rbegin()};
@@ -494,8 +495,7 @@ bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
     auto &&derivativeActivationFunction{FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag())};
 
     // output layer
-    Matrix<T> error{1ull, trainingOutput.column()};
-    Matrix<T> dError{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
+    Matrix<T> error{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
     Matrix<T> dActivation{derivativeActivationFunction((*nextLayerIter)->output())};
     switch((*nextLayerIter)->activationTag())
     {
@@ -504,10 +504,10 @@ bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
         case(ActivationTag::SIGMOID):
         case(ActivationTag::RELU):
             for(std::size_t c{0ull}; c < error.column(); c++)
-                error[0ull][c] = dError[0ull][c] * dActivation[0ull][c];
+                error[0ull][c] = error[0ull][c] * dActivation[0ull][c];
             break;
         case(ActivationTag::SOFTMAX):
-            error = dError * dActivation;
+            error = error * dActivation;
             break;
     }
 
@@ -541,6 +541,7 @@ bool MultiLayerPerceptron<T>::backpropagate(const Matrix<T> &trainingOutput
                 break;
             case(ActivationTag::SOFTMAX):
                 error = error * dActivation;
+                break;
         }
 
         (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
