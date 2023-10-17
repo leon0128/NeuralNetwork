@@ -68,6 +68,15 @@ private:
         , std::size_t earlyStopping) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
+    bool trainParameter(std::size_t epochSize
+        , std::size_t batchSize
+        , ErrorTag errorTag
+        , OptimizationTag optimizationTag
+        , const std::vector<Matrix<T>> &trainingInput
+        , const std::vector<Matrix<T>> &trainingOutput
+        , const std::vector<Matrix<T>> &validationInput
+        , const std::vector<Matrix<T>> &validationOutput
+        , std::size_t earlyStopping);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
     bool propagate(const Matrix<T> &trainingInput);
@@ -170,64 +179,16 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
     if(!randomizeParameter())
         return false;
 
-    T minError{std::numeric_limits<T>::max()};
-    std::size_t stoppingCount{0ull};
-    std::list<std::shared_ptr<Weight<T>>> weightGradients;
-    std::list<std::shared_ptr<Bias<T>>> biasGradients;
-    for(auto &&weight : mWeights)
-        weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
-    for(auto &&bias : mBiases)
-        biasGradients.emplace_back(new Bias<T>{bias->data().column()});
-
-    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
-    {
-        for(auto &&trainingIndices{createTrainingIndices(trainingInput.size(), batchSize)};
-            !trainingIndices.empty();
-            trainingIndices.pop_front())
-        {
-            std::size_t trainingIndex{trainingIndices.front()};
-            if(!propagate(trainingInput[trainingIndex]))
-                return false;
-            if(!backpropagate(trainingOutput[trainingIndex]
-                , errorTag
-                , weightGradients
-                , biasGradients))
-                return false;
-            
-            if((trainingIndices.size() - 1ull) % batchSize != 0ull)
-                continue;
-            
-            if(!calculateAverage(batchSize
-                , weightGradients
-                , biasGradients))
-                return false;
-            if(!updateParameter(optimizationTag
-                , weightGradients
-                , biasGradients))
-                return false;
-            
-            for(auto &&gradient : weightGradients)
-                gradient->data().apply([](T in){return T{0};});
-            for(auto &&gradient : biasGradients)
-                gradient->data().apply([](T in){return T{0};});
-        }
-
-        auto &&error{calculateError(validationInput, validationOutput, errorTag)};
-        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
-            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
-
-        stoppingCount
-            = error < minError
-                ? (minError = error, 0ull) // assign and return 0
-                : stoppingCount + 1ull;
-
-        if(stoppingCount == earlyStopping)
-        {
-            std::cout << "early stopping has been activated."
-                << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
-            break;
-        }
-    }
+    if(!trainParameter(epochSize
+        , batchSize
+        , errorTag
+        , optimizationTag
+        , trainingInput
+        , trainingOutput
+        , validationInput
+        , validationOutput
+        , earlyStopping))
+        return false;
 
     std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
 
@@ -437,6 +398,79 @@ bool NeuralNetwork<T>::randomizeParameter()
         }
     }
     
+    return true;
+}
+
+template<class T>
+bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
+    , std::size_t batchSize
+    , ErrorTag errorTag
+    , OptimizationTag optimizationTag
+    , const std::vector<Matrix<T>> &trainingInput
+    , const std::vector<Matrix<T>> &trainingOutput
+    , const std::vector<Matrix<T>> &validationInput
+    , const std::vector<Matrix<T>> &validationOutput
+    , std::size_t earlyStopping)
+{
+    T minError{std::numeric_limits<T>::max()};
+    std::size_t stoppingCount{0ull};
+    std::list<std::shared_ptr<Weight<T>>> weightGradients;
+    std::list<std::shared_ptr<Bias<T>>> biasGradients;
+    for(auto &&weight : mWeights)
+        weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
+    for(auto &&bias : mBiases)
+        biasGradients.emplace_back(new Bias<T>{bias->data().column()});
+
+    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
+    {
+        for(auto &&trainingIndices{createTrainingIndices(trainingInput.size(), batchSize)};
+            !trainingIndices.empty();
+            trainingIndices.pop_front())
+        {
+            std::size_t trainingIndex{trainingIndices.front()};
+            if(!propagate(trainingInput[trainingIndex]))
+                return false;
+            if(!backpropagate(trainingOutput[trainingIndex]
+                , errorTag
+                , weightGradients
+                , biasGradients))
+                return false;
+            
+            if((trainingIndices.size() - 1ull) % batchSize != 0ull)
+                continue;
+            
+            if(!calculateAverage(batchSize
+                , weightGradients
+                , biasGradients))
+                return false;
+            if(!updateParameter(optimizationTag
+                , weightGradients
+                , biasGradients))
+                return false;
+            
+            for(auto &&gradient : weightGradients)
+                gradient->data().apply([](T in){return T{0};});
+            for(auto &&gradient : biasGradients)
+                gradient->data().apply([](T in){return T{0};});
+        }
+
+        auto &&error{calculateError(validationInput, validationOutput, errorTag)};
+        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
+            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
+
+        stoppingCount
+            = error < minError
+                ? (minError = error, 0ull) // assign and return 0
+                : stoppingCount + 1ull;
+
+        if(stoppingCount == earlyStopping)
+        {
+            std::cout << "early stopping has been activated."
+                << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
+            break;
+        }
+    }
+
     return true;
 }
 
