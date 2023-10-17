@@ -19,6 +19,8 @@ public:
 
     ActivationTag activationTag() const noexcept
         {return mActivationTag;}
+    double dropout() const noexcept
+        {return mDropoutRate;}
 
     auto &input()
         {return mInput;}

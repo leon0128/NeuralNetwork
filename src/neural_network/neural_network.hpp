@@ -225,6 +225,7 @@ bool NeuralNetwork<T>::save(const std::filesystem::path &filepath) const
     {
         writeValue(stream, layer->input().column());
         writeValue(stream, layer->activationTag());
+        writeValue(stream, layer->dropout());
     }
 
     for(auto &&weight : mWeights)
@@ -255,7 +256,8 @@ bool NeuralNetwork<T>::load(const std::filesystem::path &filepath)
     {
         std::size_t layerSize{readValue<std::size_t>(stream)};
         ActivationTag tag{readValue<ActivationTag>(stream)};
-        mLayers.push_back(new Layer<T>{layerSize, tag});
+        double dropoutRate{readValue<double>(stream)};
+        mLayers.push_back(new Layer<T>{layerSize, tag, dropoutRate});
     }
 
     if(mLayers.empty())
@@ -450,8 +452,9 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
         }
 
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
-        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
-            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
+        // if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
+        //     std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
+        std::cout << epoch + 1ull << "," << error << std::endl;
 
         stoppingCount
             = error < minError
