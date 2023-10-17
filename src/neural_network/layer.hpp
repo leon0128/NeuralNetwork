@@ -18,10 +18,6 @@ public:
     ActivationTag activationTag() const noexcept
         {return mActivationTag;}
 
-    bool activate();
-
-    void input(const Matrix<T> &other)
-        {mInput = other;}
     auto &input()
         {return mInput;}
     const auto &input() const
@@ -31,7 +27,16 @@ public:
     const auto &output() const
         {return mOutput;}
 
+    bool activate(const Matrix<T> &input);
+    bool activate(const Matrix<T> &prevOutput
+        , const Matrix<T> &weight
+        , const Matrix<T> &bias)
+        {return activate(prevOutput * weight + bias);}
+    
+    Matrix<T> error(const Matrix<T> &dError) const;
+
 private:
+
     ActivationTag mActivationTag;
     Matrix<T> mInput;
     Matrix<T> mOutput;
@@ -47,11 +52,35 @@ Layer<T>::Layer(std::size_t column
 }
 
 template<class T>
-bool Layer<T>::activate()
+bool Layer<T>::activate(const Matrix<T> &input)
 {
     auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
-    output() = activationFunction(input());
+    
+    mInput = input;
+    mOutput = activationFunction(mInput);
     return true;
+}
+
+template<class T>
+Matrix<T> Layer<T>::error(const Matrix<T> &dError) const
+{
+    Matrix<T> result{FUNCTION::derivativeActivationFunction<T>(activationTag())(output())};
+
+    switch(activationTag())
+    {
+        case(ActivationTag::NONE):
+        case(ActivationTag::ELU):
+        case(ActivationTag::SIGMOID):
+        case(ActivationTag::RELU):
+            for(std::size_t c{0ull}; c < result.column(); c++)
+                result[0ull][c] *= dError[0ull][c];
+            break;
+        case(ActivationTag::SOFTMAX):
+            result = dError * result;
+            break;
+    }
+
+    return result;
 }
 
 }
