@@ -260,25 +260,19 @@ bool NeuralNetwork<T>::load(const std::filesystem::path &filepath)
     if(mLayers.empty())
         return readingError("multi layer perceptron has no layer.", filepath);
 
-    for(auto &&prevIter{mLayers.begin()}
-            , nextIter{std::next(mLayers.begin())};
-        nextIter != mLayers.end();
-        prevIter++
-            , nextIter++)
+    for(auto &&iter{mLayers.begin()}; std::next(iter) != mLayers.end(); iter++)
     {
-        Weight<T> *weight{new Weight<T>{(*prevIter)->input().column()
-            , (*nextIter)->input().column()}};
+        Weight<T> *weight{new Weight<T>{(*iter)->input().column()
+            , (*std::next(iter))->input().column()}};
         for(std::size_t r{0ull}; r < weight->data().row(); r++)
             for(std::size_t c{0ull}; c < weight->data().column(); c++)
                 weight->data()[r][c] = readValue<T>(stream);
         mWeights.push_back(weight);
     }
 
-    for(auto &&nextIter{std::next(mLayers.begin())};
-        nextIter != mLayers.end();
-        nextIter++)
+    for(auto &&iter{std::next(mLayers.begin())}; iter != mLayers.end(); iter++)
     {
-        Bias<T> *bias{new Bias<T>{(*nextIter)->input().column()}};
+        Bias<T> *bias{new Bias<T>{(*iter)->input().column()}};
         for(std::size_t c{0ull}; c < bias->data().column(); c++)
             bias->data()[0ull][c] = readValue<T>(stream);
         mBiases.push_back(bias);
@@ -367,14 +361,12 @@ bool NeuralNetwork<T>::checkValidity(const Matrix<T> &input) const
 template<class T>
 bool NeuralNetwork<T>::randomizeParameter()
 {
-    auto &&prevLayerIter{mLayers.begin()};
     auto &&layerIter{std::next(mLayers.begin())};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
     for(;
         layerIter != mLayers.end();
-        prevLayerIter++
-            , layerIter++
+        layerIter++
             , weightIter++
             , biasIter++)
     {
@@ -386,7 +378,7 @@ bool NeuralNetwork<T>::randomizeParameter()
             case(ActivationTag::SOFTMAX):
             case(ActivationTag::RELU):
             {
-                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*prevLayerIter)->output().column())};
+                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*std::prev(layerIter))->output().column())};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
                     for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
                         (*weightIter)->data()[r][c] = dist(RANDOM.engine());
@@ -495,27 +487,22 @@ std::deque<std::size_t> NeuralNetwork<T>::createTrainingIndices(std::size_t trai
 template<class T>
 bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput)
 {
-    auto &&prevLayerIter{mLayers.begin()};
-    auto &&nextLayerIter{std::next(mLayers.begin())};
+    auto &&layerIter{mLayers.begin()};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
 
-    // input layer
-    (*prevLayerIter)->input(trainingInput);
-    if(!(*prevLayerIter)->activate())
+    if(!(*layerIter)->activate(trainingInput))
         return false;
-    
-    // others
-    for(;
-        nextLayerIter != mLayers.end();
-        prevLayerIter++
-            , nextLayerIter++
+
+    for(layerIter++;
+        layerIter != mLayers.end();
+        layerIter++
             , weightIter++
             , biasIter++)
     {
-        (*nextLayerIter)->input((*prevLayerIter)->output() * (*weightIter)->data());
-        (*nextLayerIter)->input() += (*biasIter)->data();
-        if(!(*nextLayerIter)->activate())
+        if(!(*layerIter)->activate((*std::prev(layerIter))->output()
+            , (*weightIter)->data()
+            , (*biasIter)->data()))
             return false;
     }
 
@@ -529,67 +516,30 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
     // reverse iterators
-    auto &&prevLayerIter{std::next(mLayers.rbegin())};
-    auto &&nextLayerIter{mLayers.rbegin()};
+    auto &&layerIter{mLayers.rbegin()};
     auto &&weightIter{mWeights.rbegin()};
     auto &&biasIter{mBiases.rbegin()};
     auto &&weightGradientIter{weightGradients.rbegin()};
     auto &&biasGradientIter{biasGradients.rbegin()};
 
-    auto &&derivativeErrorFunction{FUNCTION::derivativeErrorFunction<T>(errorTag)};
-    auto &&derivativeActivationFunction{FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag())};
-
     // output layer
-    Matrix<T> error{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
-    Matrix<T> dActivation{derivativeActivationFunction((*nextLayerIter)->output())};
-    switch((*nextLayerIter)->activationTag())
-    {
-        case(ActivationTag::NONE):
-        case(ActivationTag::ELU):
-        case(ActivationTag::SIGMOID):
-        case(ActivationTag::RELU):
-            for(std::size_t c{0ull}; c < error.column(); c++)
-                error[0ull][c] = error[0ull][c] * dActivation[0ull][c];
-            break;
-        case(ActivationTag::SOFTMAX):
-            error = error * dActivation;
-            break;
-    }
-
-    (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
+    Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->output()))};
+    (*weightGradientIter)->data() += ~(*std::next(layerIter))->output() * error;
     (*biasGradientIter)->data() += error;
 
     // others
-    for(prevLayerIter++
-            , nextLayerIter++
+    for(layerIter++
             , weightGradientIter++
             , biasGradientIter++;
-        prevLayerIter != mLayers.rend();
-        prevLayerIter++
-            , nextLayerIter++
+        std::next(layerIter) != mLayers.rend();
+        layerIter++
             , weightIter++
             , biasIter++
             , weightGradientIter++
             , biasGradientIter++)
     {
-        derivativeActivationFunction = FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag());
-        error = error * ~(*weightIter)->data();
-        dActivation = derivativeActivationFunction((*nextLayerIter)->output());
-        switch((*nextLayerIter)->activationTag())
-        {
-            case(ActivationTag::ELU):
-            case(ActivationTag::NONE):
-            case(ActivationTag::RELU):
-            case(ActivationTag::SIGMOID):
-                for(std::size_t c{0ull}; c < error.column(); c++)
-                    error[0ull][c] *= dActivation[0ull][c];
-                break;
-            case(ActivationTag::SOFTMAX):
-                error = error * dActivation;
-                break;
-        }
-
-        (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
+        error = (*layerIter)->error(error * ~(*weightIter)->data());
+        (*weightGradientIter)->data() += ~(*std::next(layerIter))->output() * error;
         (*biasGradientIter)->data() += error;
     }
 
