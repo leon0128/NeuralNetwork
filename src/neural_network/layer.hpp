@@ -2,6 +2,7 @@
 #define NEURAL_NETWORK_LAYER_HPP
 
 #include "matrix/matrix.hpp"
+#include "random.hpp"
 #include "function.hpp"
 #include "tag.hpp"
 
@@ -13,7 +14,8 @@ class Layer
 {
 public:
     Layer(std::size_t column
-        , ActivationTag tag);
+        , ActivationTag tag
+        , double dropoutRate = 1.0);
 
     ActivationTag activationTag() const noexcept
         {return mActivationTag;}
@@ -27,6 +29,11 @@ public:
     const auto &output() const
         {return mOutput;}
 
+    // this function is called by constructor
+    bool updateDropout();
+    auto &&dropout() const noexcept
+        {return mDropout;}
+
     bool activate(const Matrix<T> &input);
     bool activate(const Matrix<T> &prevOutput
         , const Matrix<T> &weight
@@ -36,19 +43,31 @@ public:
     Matrix<T> error(const Matrix<T> &dError) const;
 
 private:
-
     ActivationTag mActivationTag;
     Matrix<T> mInput;
     Matrix<T> mOutput;
+    double mDropoutRate;
+    Matrix<T> mDropout;
 };
 
 template<class T>
 Layer<T>::Layer(std::size_t column
-    , ActivationTag tag)
+    , ActivationTag tag
+    , double dropoutRate)
     : mActivationTag{tag}
     , mInput{1ull, column}
     , mOutput{1ull, column}
+    , mDropoutRate{dropoutRate}
+    , mDropout{1ull, column}
 {
+    updateDropout();
+}
+
+template<class T>
+bool Layer<T>::updateDropout()
+{
+    mDropout.apply([&](T in){return static_cast<T>(RANDOM.floating() <= mDropoutRate);});
+    return true;
 }
 
 template<class T>
