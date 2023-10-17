@@ -39,7 +39,11 @@ public:
         {return &data()[rowIndex * column()];}
 
     Matrix &operator +=(const Matrix &rhs);
+    Matrix &operator +=(ValueType);
     Matrix &operator -=(const Matrix &rhs);
+    Matrix &operator -=(ValueType);
+    Matrix &operator *=(ValueType);
+    Matrix &operator /=(ValueType);
 
 private:
     std::size_t mRow; // row size
@@ -51,10 +55,34 @@ template<class T>
 Matrix<T> operator +(const Matrix<T> &lhs
     , const Matrix<T> &rhs);
 template<class T>
+Matrix<T> operator +(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs);
+template<class T>
+Matrix<T> operator +(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs);
+template<class T>
 Matrix<T> operator -(const Matrix<T> &lhs
     , const Matrix<T> &rhs);
 template<class T>
+Matrix<T> operator -(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs);
+template<class T>
+Matrix<T> operator -(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs);
+template<class T>
 Matrix<T> operator *(const Matrix<T> &lhs
+    , const Matrix<T> &rhs);
+template<class T>
+Matrix<T> operator *(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs);
+template<class T>
+Matrix<T> operator *(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs);
+template<class T>
+Matrix<T> operator /(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs);
+template<class T>
+Matrix<T> operator /(typename Matrix<T>::ValueType lhs
     , const Matrix<T> &rhs);
 template<class T>
 Matrix<T> operator ~(const Matrix<T> &other);
@@ -174,6 +202,16 @@ Matrix<T> &Matrix<T>::operator +=(const Matrix<T> &rhs)
 }
 
 template<class T>
+Matrix<T> &Matrix<T>::operator +=(ValueType v)
+{
+    for(std::size_t r{0ull}; r < row(); r++)
+        for(std::size_t c{0ull}; c < column(); c++)
+            operator[](r)[c] += v;
+
+    return *this;
+}
+
+template<class T>
 Matrix<T> &Matrix<T>::operator -=(const Matrix<T> &rhs)
 {
     if(row() != rhs.row()
@@ -190,6 +228,36 @@ Matrix<T> &Matrix<T>::operator -=(const Matrix<T> &rhs)
 }
 
 template<class T>
+Matrix<T> &Matrix<T>::operator -=(ValueType v)
+{
+    for(std::size_t r{0ull}; r < row(); r++)
+        for(std::size_t c{0ull}; c < column(); c++)
+            operator[](r)[c] -= v;
+        
+    return *this;
+}
+
+template<class T>
+Matrix<T> &Matrix<T>::operator *=(ValueType v)
+{
+    for(std::size_t r{0ull}; r < row(); r++)
+        for(std::size_t c{0ull}; c < column(); c++)
+            operator[](r)[c] *= v;
+    
+    return *this;
+}
+
+template<class T>
+Matrix<T> &Matrix<T>::operator /=(ValueType v)
+{
+    for(std::size_t r{0ull}; r < row(); r++)
+        for(std::size_t c{0ull}; c < column(); c++)
+            operator[](r)[c] /= v;
+    
+    return *this;
+}
+
+template<class T>
 Matrix<T> operator +(const Matrix<T> &lhs
     , const Matrix<T> &rhs)
 {
@@ -198,11 +266,46 @@ Matrix<T> operator +(const Matrix<T> &lhs
 }
 
 template<class T>
+Matrix<T> operator +(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs)
+{
+    Matrix result{lhs};
+    return result += rhs;
+}
+
+template<class T>
+Matrix<T> operator +(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs)
+{
+    Matrix result{rhs};
+    return result += lhs;
+}
+
+template<class T>
 Matrix<T> operator -(const Matrix<T> &lhs
     , const Matrix<T> &rhs)
 {
     Matrix result{lhs};
     return result -= rhs;
+}
+
+template<class T>
+Matrix<T> operator -(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs)
+{
+    Matrix result{lhs};
+    return result -= rhs;
+}
+
+template<class T>
+Matrix<T> operator -(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs)
+{
+    Matrix result{rhs};
+    for(std::size_t r{0ull}; r < result.row(); r++)
+        for(std::size_t c{0ull}; c < result.column(); c++)
+            result[r][c] = lhs - result[r][c];
+    return result;
 }
 
 template<class T>
@@ -224,6 +327,43 @@ Matrix<T> operator *(const Matrix<T> &lhs
 
     return result;
 }
+
+template<class T>
+Matrix<T> operator *(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs)
+{
+    Matrix<T> result{lhs};
+    return result *= rhs;
+}
+
+template<class T>
+Matrix<T> operator *(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs)
+{
+    Matrix<T> result{rhs};
+    return result *= lhs;
+}
+
+template<class T>
+Matrix<T> operator /(const Matrix<T> &lhs
+    , typename Matrix<T>::ValueType rhs)
+{
+    Matrix<T> result{lhs};
+    return result /= rhs;
+}
+
+template<class T>
+Matrix<T> operator /(typename Matrix<T>::ValueType lhs
+    , const Matrix<T> &rhs)
+{
+    Matrix<T> result{rhs};
+    for(std::size_t r{0ull}; r < result.row(); r++)
+        for(std::size_t c{0ull}; c < result.column(); c++)
+            result[r][c] = lhs / result[r][c];
+    
+    return result;
+}
+
 
 template<class T>
 Matrix<T> operator ~(const Matrix<T> &other)

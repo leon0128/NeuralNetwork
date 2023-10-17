@@ -31,18 +31,31 @@ public:
 
     // this function is called by constructor
     bool updateDropout();
-    auto &&dropout() const noexcept
-        {return mDropout;}
 
-    bool activate(const Matrix<T> &input);
-    bool activate(const Matrix<T> &prevOutput
+    bool activate(const Matrix<T> &in
+        , bool isTraining)
+        {return isTraining ? activateForTraining(in) : activateForPrediction(in);}
+    bool activate(const Matrix<T> &prevOut
         , const Matrix<T> &weight
-        , const Matrix<T> &bias)
-        {return activate(prevOutput * weight + bias);}
-    
+        , const Matrix<T> &bias
+        , bool isTraining)
+        {return isTraining ? activateForTraining(prevOut, weight, bias) : activateForPrediction(prevOut, weight, bias);}
+
     Matrix<T> error(const Matrix<T> &dError) const;
 
 private:
+    bool activateForTraining(const Matrix<T> &in);
+    bool activateForTraining(const Matrix<T> &prevOut
+        , const Matrix<T> &weight
+        , const Matrix<T> &bias)
+        {return activateForTraining(prevOut * weight + bias);}
+    bool activateForPrediction(const Matrix<T> &in);
+    bool activateForPrediction(const Matrix<T> &prevOut
+        , const Matrix<T> &weight
+        , const Matrix<T> &bias)
+        {return activateForPrediction(prevOut * weight * mDropoutRate + bias);}
+    
+
     ActivationTag mActivationTag;
     Matrix<T> mInput;
     Matrix<T> mOutput;
@@ -71,12 +84,25 @@ bool Layer<T>::updateDropout()
 }
 
 template<class T>
-bool Layer<T>::activate(const Matrix<T> &input)
+bool Layer<T>::activateForTraining(const Matrix<T> &in)
 {
     auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
     
-    mInput = input;
+    mInput = in;
     mOutput = activationFunction(mInput);
+    for(std::size_t c{0ull}; c < mOutput.column(); c++)
+        mOutput[0ull][c] *= mDropout[0ull][c];
+    return true;
+}
+
+template<class T>
+bool Layer<T>::activateForPrediction(const Matrix<T> &in)
+{
+    auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
+    
+    mInput = in;
+    mOutput = activationFunction(mInput);
+
     return true;
 }
 
@@ -98,6 +124,9 @@ Matrix<T> Layer<T>::error(const Matrix<T> &dError) const
             result = dError * result;
             break;
     }
+
+    for(std::size_t c{0ull}; c < result.column(); c++)
+        result[0ull][c] *= mDropout[0ull][c];
 
     return result;
 }

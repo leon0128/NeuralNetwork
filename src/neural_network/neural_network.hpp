@@ -79,7 +79,8 @@ private:
         , std::size_t earlyStopping);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
-    bool propagate(const Matrix<T> &trainingInput);
+    bool propagate(const Matrix<T> &trainingInput
+        , bool isTraining);
     bool backpropagate(const Matrix<T> &trainingOutput
         , ErrorTag errorTag
         , std::list<std::shared_ptr<Weight<T>>> &weightGradients
@@ -202,7 +203,7 @@ bool NeuralNetwork<T>::predict(const Matrix<T> &input
     if(!checkValidity(input))
         return false;
 
-    if(!propagate(input))
+    if(!propagate(input, false))
         return false;
     
     output = mLayers.back()->output();
@@ -420,7 +421,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             trainingIndices.pop_front())
         {
             std::size_t trainingIndex{trainingIndices.front()};
-            if(!propagate(trainingInput[trainingIndex]))
+            if(!propagate(trainingInput[trainingIndex], true))
                 return false;
             if(!backpropagate(trainingOutput[trainingIndex]
                 , errorTag
@@ -440,6 +441,8 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
                 , biasGradients))
                 return false;
             
+            for(auto &&layer : mLayers)
+                layer->updateDropout();
             for(auto &&gradient : weightGradients)
                 gradient->data().apply([](T in){return T{0};});
             for(auto &&gradient : biasGradients)
@@ -485,13 +488,14 @@ std::deque<std::size_t> NeuralNetwork<T>::createTrainingIndices(std::size_t trai
 }
 
 template<class T>
-bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput)
+bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput
+    , bool isTraining)
 {
     auto &&layerIter{mLayers.begin()};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
 
-    if(!(*layerIter)->activate(trainingInput))
+    if(!(*layerIter)->activate(trainingInput, isTraining))
         return false;
 
     for(layerIter++;
@@ -502,7 +506,8 @@ bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput)
     {
         if(!(*layerIter)->activate((*std::prev(layerIter))->output()
             , (*weightIter)->data()
-            , (*biasIter)->data()))
+            , (*biasIter)->data()
+            , isTraining))
             return false;
     }
 
@@ -672,7 +677,7 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
         inputIter++
             , outputIter++)
     {
-        propagate(*inputIter);
+        propagate(*inputIter, true);
         error += errorFunction((*outputIter), mLayers.back()->output());
     }
 

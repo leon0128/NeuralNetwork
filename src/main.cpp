@@ -94,8 +94,5 @@ int main(int argc, char **argv)
     newMlp.predict(inputD, result);
     std::cout << inputD << ": " << result << std::endl;
 
-    Layer<double> layer{10, ActivationTag::NONE, 0.0};
-    std::cout << layer.dropout() << std::endl;
-
     return 0;
 }
