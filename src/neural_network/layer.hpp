@@ -13,10 +13,15 @@ template<class T>
 class Layer
 {
 public:
+    friend class Saver;
+    friend class Loader;
+
     Layer(std::size_t column
         , ActivationTag tag
         , double dropoutRate = 0.0);
 
+    std::size_t column() const noexcept
+        {return mColumn;}
     ActivationTag activationTag() const noexcept
         {return mActivationTag;}
     double dropout() const noexcept
@@ -55,8 +60,9 @@ private:
     bool activateForPrediction(const Matrix<T> &prevOut
         , const Matrix<T> &weight
         , const Matrix<T> &bias)
-        {return activateForPrediction(prevOut * weight * mDropoutRate + bias);}
+        {return activateForPrediction(prevOut * weight * (T{1} - mDropoutRate) + bias);}
     
+    std::size_t mColumn;
     ActivationTag mActivationTag;
     Matrix<T> mInput;
     Matrix<T> mOutput;
@@ -68,7 +74,8 @@ template<class T>
 Layer<T>::Layer(std::size_t column
     , ActivationTag tag
     , double dropoutRate)
-    : mActivationTag{tag}
+    : mColumn{column}
+    , mActivationTag{tag}
     , mInput{1ull, column}
     , mOutput{1ull, column}
     , mDropoutRate{dropoutRate}

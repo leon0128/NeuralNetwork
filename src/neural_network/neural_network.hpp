@@ -31,6 +31,9 @@ template<class T>
 class NeuralNetwork
 {
 public:
+    friend class Saver;
+    friend class Loader;
+
     NeuralNetwork();
     ~NeuralNetwork();
 
@@ -50,9 +53,6 @@ public:
 
     bool predict(const Matrix<T> &input
         , Matrix<T> &output);
-
-    bool save(const std::filesystem::path &filepath) const;
-    bool load(const std::filesystem::path &filepath);
 
 private:
     bool checkValidity(std::size_t epochSize
@@ -94,12 +94,6 @@ private:
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
-
-    template<class U>
-    void writeValue(std::ofstream &stream
-        , U &&value) const;
-    template<class U>
-    U readValue(std::ifstream &stream) const;
 
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
@@ -211,83 +205,6 @@ bool NeuralNetwork<T>::predict(const Matrix<T> &input
 }
 
 template<class T>
-bool NeuralNetwork<T>::save(const std::filesystem::path &filepath) const
-{
-    if(mLayers.empty())
-        return writingError("NeuralNetwork has no layer.", filepath);
-
-    std::ofstream stream{filepath, std::ios::out | std::ios::binary};
-    if(!stream.is_open())
-        return openingFileError(filepath);
-
-    writeValue(stream, mLayers.size());
-    for(auto &&layer : mLayers)
-    {
-        writeValue(stream, layer->input().column());
-        writeValue(stream, layer->activationTag());
-        writeValue(stream, layer->dropout());
-    }
-
-    for(auto &&weight : mWeights)
-        for(std::size_t r{0ull}; r < weight->data().row(); r++)
-            for(std::size_t c{0ull}; c < weight->data().column(); c++)
-                writeValue(stream, weight->data()[r][c]);
-    for(auto &&bias : mBiases)
-        for(std::size_t c{0ull}; c < bias->data().column(); c++)
-            writeValue(stream, bias->data()[0ull][c]);
-
-    if(!stream)
-        return writingError("failed to write parameters", filepath);
-    
-    return true;
-}
-
-template<class T>
-bool NeuralNetwork<T>::load(const std::filesystem::path &filepath)
-{
-    if(!mLayers.empty())
-        return readingError("NeuralNetwork has a layers already.", filepath);
-
-    std::ifstream stream{filepath, std::ios::in | std::ios::binary};
-    if(!stream.is_open())
-        return openingFileError(filepath);
-
-    for(std::size_t i{0ull}, numLayer{readValue<std::size_t>(stream)}; i < numLayer; i++)
-    {
-        std::size_t layerSize{readValue<std::size_t>(stream)};
-        ActivationTag tag{readValue<ActivationTag>(stream)};
-        double dropoutRate{readValue<double>(stream)};
-        mLayers.push_back(new Layer<T>{layerSize, tag, dropoutRate});
-    }
-
-    if(mLayers.empty())
-        return readingError("multi layer perceptron has no layer.", filepath);
-
-    for(auto &&iter{mLayers.begin()}; std::next(iter) != mLayers.end(); iter++)
-    {
-        Weight<T> *weight{new Weight<T>{(*iter)->input().column()
-            , (*std::next(iter))->input().column()}};
-        for(std::size_t r{0ull}; r < weight->data().row(); r++)
-            for(std::size_t c{0ull}; c < weight->data().column(); c++)
-                weight->data()[r][c] = readValue<T>(stream);
-        mWeights.push_back(weight);
-    }
-
-    for(auto &&iter{std::next(mLayers.begin())}; iter != mLayers.end(); iter++)
-    {
-        Bias<T> *bias{new Bias<T>{(*iter)->input().column()}};
-        for(std::size_t c{0ull}; c < bias->data().column(); c++)
-            bias->data()[0ull][c] = readValue<T>(stream);
-        mBiases.push_back(bias);
-    }
-
-    if(!stream)
-        return readingError("failed to read parameters.", filepath);
-
-    return true;
-}
-
-template<class T>
 bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
     , std::size_t batchSize
     , ErrorTag errorTag
@@ -339,7 +256,7 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
         return trainingError("condition of early stopping is invalid.");
 
     for(auto &&layer : mLayers)
-        if(layer->input().column() == 0ull)
+        if(layer->column() == 0ull)
             return trainingError("layer has 0 size's input");
 
     return true;
@@ -351,11 +268,11 @@ bool NeuralNetwork<T>::checkValidity(const Matrix<T> &input) const
     if(mLayers.empty())
         return activationError("multi-layer perceptron has no layers");
     for(auto &&layer : mLayers)
-        if(layer->input().column() == 0ull)
+        if(layer->column() == 0ull)
             return activationError("layer has 0 size's input.");
 
     if(input.row() != 1ull
-        || input.column() != mLayers.front()->input().column())
+        || input.column() != mLayers.front()->column())
         return activationError("input size does not match layer's input.");
 
     return true;
@@ -684,31 +601,6 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
     }
 
     return error;
-}
-
-template<class T>
-template<class U>
-void NeuralNetwork<T>::writeValue(std::ofstream &stream
-    , U &&value) const
-{
-    static const char padding[256]{0};
-
-    stream.write(reinterpret_cast<const char*>(&padding)
-        , (alignof(U) - stream.tellp() % alignof(U)) % alignof(U));
-    stream.write(reinterpret_cast<const char*>(&value)
-        , sizeof(U));
-}
-
-template<class T>
-template<class U>
-U NeuralNetwork<T>::readValue(std::ifstream &stream) const
-{
-    U value;
-    stream.seekg((alignof(U) - stream.tellg() % alignof(U)) % alignof(U)
-        , std::ios_base::cur);
-    stream.read(reinterpret_cast<char*>(&value)
-        , sizeof(U));
-    return value;
 }
 
 template<class T>

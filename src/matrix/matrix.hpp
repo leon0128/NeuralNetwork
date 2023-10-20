@@ -107,7 +107,7 @@ Matrix<T>::Matrix(std::size_t rowSize
     , std::size_t columnSize)
     : mRow{rowSize}
     , mColumn{columnSize}
-    , mData{new T[rowSize * columnSize]{static_cast<T>(0)}}
+    , mData{mRow * mColumn != 0 ? new T[mRow * mColumn]{static_cast<T>(0)} : nullptr}
 {
 }
 
@@ -115,7 +115,7 @@ template<class T>
 Matrix<T>::Matrix(const Matrix<T> &other)
     : mRow{other.row()}
     , mColumn{other.column()}
-    , mData{new T[mRow * mColumn]}
+    , mData{mRow * mColumn != 0 ? new T[mRow * mColumn] : nullptr}
 {
     for(std::size_t r{0ull}; r < row(); r++)
     {
@@ -143,7 +143,7 @@ Matrix<T> &Matrix<T>::operator=(const Matrix<T> &other)
         delete []mData;
         mRow = other.row();
         mColumn = other.column();
-        mData = new T[mRow * mColumn];
+        mData = mRow * mColumn != 0 ? new T[mRow * mColumn] : nullptr;
 
         for(std::size_t r{0ull}; r < mRow; r++)
             for(std::size_t c{0ull}; c < mColumn; c++)
