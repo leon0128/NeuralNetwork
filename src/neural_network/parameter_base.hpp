@@ -1,7 +1,10 @@
 #ifndef NEURAL_NETWORK_PARAMETER_BASE_HPP
 #define NEURAL_NETWORK_PARAMETER_BASE_HPP
 
+#include <iostream>
+
 #include "matrix/matrix.hpp"
+#include "function.hpp"
 
 namespace NEURAL_NETWORK
 {
@@ -10,9 +13,12 @@ template<class T>
 class ParameterBase
 {
 public:
+    friend class Saver;
+    friend class Loader;
+
     ParameterBase(std::size_t row
         , std::size_t column);
-    virtual ~ParameterBase() = 0;
+    virtual ~ParameterBase();
 
     auto &data()
         {return mData;}

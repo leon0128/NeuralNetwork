@@ -31,6 +31,9 @@ template<class T>
 class NeuralNetwork
 {
 public:
+    friend class Saver;
+    friend class Loader;
+
     NeuralNetwork();
     ~NeuralNetwork();
 
@@ -51,9 +54,6 @@ public:
     bool predict(const Matrix<T> &input
         , Matrix<T> &output);
 
-    bool save(const std::filesystem::path &filepath) const;
-    bool load(const std::filesystem::path &filepath);
-
 private:
     bool checkValidity(std::size_t epochSize
         , std::size_t batchSize
@@ -68,9 +68,19 @@ private:
         , std::size_t earlyStopping) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
+    bool trainParameter(std::size_t epochSize
+        , std::size_t batchSize
+        , ErrorTag errorTag
+        , OptimizationTag optimizationTag
+        , const std::vector<Matrix<T>> &trainingInput
+        , const std::vector<Matrix<T>> &trainingOutput
+        , const std::vector<Matrix<T>> &validationInput
+        , const std::vector<Matrix<T>> &validationOutput
+        , std::size_t earlyStopping);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
-    bool propagate(const Matrix<T> &trainingInput);
+    bool propagate(const Matrix<T> &trainingInput
+        , bool isTraining);
     bool backpropagate(const Matrix<T> &trainingOutput
         , ErrorTag errorTag
         , std::list<std::shared_ptr<Weight<T>>> &weightGradients
@@ -84,12 +94,6 @@ private:
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
-
-    template<class U>
-    void writeValue(std::ofstream &stream
-        , U &&value) const;
-    template<class U>
-    U readValue(std::ifstream &stream) const;
 
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
@@ -170,64 +174,16 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
     if(!randomizeParameter())
         return false;
 
-    T minError{std::numeric_limits<T>::max()};
-    std::size_t stoppingCount{0ull};
-    std::list<std::shared_ptr<Weight<T>>> weightGradients;
-    std::list<std::shared_ptr<Bias<T>>> biasGradients;
-    for(auto &&weight : mWeights)
-        weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
-    for(auto &&bias : mBiases)
-        biasGradients.emplace_back(new Bias<T>{bias->data().column()});
-
-    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
-    {
-        for(auto &&trainingIndices{createTrainingIndices(trainingInput.size(), batchSize)};
-            !trainingIndices.empty();
-            trainingIndices.pop_front())
-        {
-            std::size_t trainingIndex{trainingIndices.front()};
-            if(!propagate(trainingInput[trainingIndex]))
-                return false;
-            if(!backpropagate(trainingOutput[trainingIndex]
-                , errorTag
-                , weightGradients
-                , biasGradients))
-                return false;
-            
-            if((trainingIndices.size() - 1ull) % batchSize != 0ull)
-                continue;
-            
-            if(!calculateAverage(batchSize
-                , weightGradients
-                , biasGradients))
-                return false;
-            if(!updateParameter(optimizationTag
-                , weightGradients
-                , biasGradients))
-                return false;
-            
-            for(auto &&gradient : weightGradients)
-                gradient->data().apply([](T in){return T{0};});
-            for(auto &&gradient : biasGradients)
-                gradient->data().apply([](T in){return T{0};});
-        }
-
-        auto &&error{calculateError(validationInput, validationOutput, errorTag)};
-        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
-            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
-
-        stoppingCount
-            = error < minError
-                ? (minError = error, 0ull) // assign and return 0
-                : stoppingCount + 1ull;
-
-        if(stoppingCount == earlyStopping)
-        {
-            std::cout << "early stopping has been activated."
-                << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
-            break;
-        }
-    }
+    if(!trainParameter(epochSize
+        , batchSize
+        , errorTag
+        , optimizationTag
+        , trainingInput
+        , trainingOutput
+        , validationInput
+        , validationOutput
+        , earlyStopping))
+        return false;
 
     std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
 
@@ -241,91 +197,10 @@ bool NeuralNetwork<T>::predict(const Matrix<T> &input
     if(!checkValidity(input))
         return false;
 
-    if(!propagate(input))
+    if(!propagate(input, false))
         return false;
     
     output = mLayers.back()->output();
-    return true;
-}
-
-template<class T>
-bool NeuralNetwork<T>::save(const std::filesystem::path &filepath) const
-{
-    if(mLayers.empty())
-        return writingError("NeuralNetwork has no layer.", filepath);
-
-    std::ofstream stream{filepath, std::ios::out | std::ios::binary};
-    if(!stream.is_open())
-        return openingFileError(filepath);
-
-    writeValue(stream, mLayers.size());
-    for(auto &&layer : mLayers)
-    {
-        writeValue(stream, layer->input().column());
-        writeValue(stream, layer->activationTag());
-    }
-
-    for(auto &&weight : mWeights)
-        for(std::size_t r{0ull}; r < weight->data().row(); r++)
-            for(std::size_t c{0ull}; c < weight->data().column(); c++)
-                writeValue(stream, weight->data()[r][c]);
-    for(auto &&bias : mBiases)
-        for(std::size_t c{0ull}; c < bias->data().column(); c++)
-            writeValue(stream, bias->data()[0ull][c]);
-
-    if(!stream)
-        return writingError("failed to write parameters", filepath);
-    
-    return true;
-}
-
-template<class T>
-bool NeuralNetwork<T>::load(const std::filesystem::path &filepath)
-{
-    if(!mLayers.empty())
-        return readingError("NeuralNetwork has a layers already.", filepath);
-
-    std::ifstream stream{filepath, std::ios::in | std::ios::binary};
-    if(!stream.is_open())
-        return openingFileError(filepath);
-
-    for(std::size_t i{0ull}, numLayer{readValue<std::size_t>(stream)}; i < numLayer; i++)
-    {
-        std::size_t layerSize{readValue<std::size_t>(stream)};
-        ActivationTag tag{readValue<ActivationTag>(stream)};
-        mLayers.push_back(new Layer<T>{layerSize, tag});
-    }
-
-    if(mLayers.empty())
-        return readingError("multi layer perceptron has no layer.", filepath);
-
-    for(auto &&prevIter{mLayers.begin()}
-            , nextIter{std::next(mLayers.begin())};
-        nextIter != mLayers.end();
-        prevIter++
-            , nextIter++)
-    {
-        Weight<T> *weight{new Weight<T>{(*prevIter)->input().column()
-            , (*nextIter)->input().column()}};
-        for(std::size_t r{0ull}; r < weight->data().row(); r++)
-            for(std::size_t c{0ull}; c < weight->data().column(); c++)
-                weight->data()[r][c] = readValue<T>(stream);
-        mWeights.push_back(weight);
-    }
-
-    for(auto &&nextIter{std::next(mLayers.begin())};
-        nextIter != mLayers.end();
-        nextIter++)
-    {
-        Bias<T> *bias{new Bias<T>{(*nextIter)->input().column()}};
-        for(std::size_t c{0ull}; c < bias->data().column(); c++)
-            bias->data()[0ull][c] = readValue<T>(stream);
-        mBiases.push_back(bias);
-    }
-
-    if(!stream)
-        return readingError("failed to read parameters.", filepath);
-
     return true;
 }
 
@@ -381,7 +256,7 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
         return trainingError("condition of early stopping is invalid.");
 
     for(auto &&layer : mLayers)
-        if(layer->input().column() == 0ull)
+        if(layer->column() == 0ull)
             return trainingError("layer has 0 size's input");
 
     return true;
@@ -393,11 +268,11 @@ bool NeuralNetwork<T>::checkValidity(const Matrix<T> &input) const
     if(mLayers.empty())
         return activationError("multi-layer perceptron has no layers");
     for(auto &&layer : mLayers)
-        if(layer->input().column() == 0ull)
+        if(layer->column() == 0ull)
             return activationError("layer has 0 size's input.");
 
     if(input.row() != 1ull
-        || input.column() != mLayers.front()->input().column())
+        || input.column() != mLayers.front()->column())
         return activationError("input size does not match layer's input.");
 
     return true;
@@ -406,14 +281,12 @@ bool NeuralNetwork<T>::checkValidity(const Matrix<T> &input) const
 template<class T>
 bool NeuralNetwork<T>::randomizeParameter()
 {
-    auto &&prevLayerIter{mLayers.begin()};
     auto &&layerIter{std::next(mLayers.begin())};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
     for(;
         layerIter != mLayers.end();
-        prevLayerIter++
-            , layerIter++
+        layerIter++
             , weightIter++
             , biasIter++)
     {
@@ -425,7 +298,7 @@ bool NeuralNetwork<T>::randomizeParameter()
             case(ActivationTag::SOFTMAX):
             case(ActivationTag::RELU):
             {
-                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*prevLayerIter)->output().column())};
+                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*std::prev(layerIter))->output().column())};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
                     for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
                         (*weightIter)->data()[r][c] = dist(RANDOM.engine());
@@ -437,6 +310,81 @@ bool NeuralNetwork<T>::randomizeParameter()
         }
     }
     
+    return true;
+}
+
+template<class T>
+bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
+    , std::size_t batchSize
+    , ErrorTag errorTag
+    , OptimizationTag optimizationTag
+    , const std::vector<Matrix<T>> &trainingInput
+    , const std::vector<Matrix<T>> &trainingOutput
+    , const std::vector<Matrix<T>> &validationInput
+    , const std::vector<Matrix<T>> &validationOutput
+    , std::size_t earlyStopping)
+{
+    T minError{std::numeric_limits<T>::max()};
+    std::size_t stoppingCount{0ull};
+    std::list<std::shared_ptr<Weight<T>>> weightGradients;
+    std::list<std::shared_ptr<Bias<T>>> biasGradients;
+    for(auto &&weight : mWeights)
+        weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
+    for(auto &&bias : mBiases)
+        biasGradients.emplace_back(new Bias<T>{bias->data().column()});
+
+    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
+    {
+        for(auto &&trainingIndices{createTrainingIndices(trainingInput.size(), batchSize)};
+            !trainingIndices.empty();
+            trainingIndices.pop_front())
+        {
+            std::size_t trainingIndex{trainingIndices.front()};
+            if(!propagate(trainingInput[trainingIndex], true))
+                return false;
+            if(!backpropagate(trainingOutput[trainingIndex]
+                , errorTag
+                , weightGradients
+                , biasGradients))
+                return false;
+            
+            if((trainingIndices.size() - 1ull) % batchSize != 0ull)
+                continue;
+            
+            if(!calculateAverage(batchSize
+                , weightGradients
+                , biasGradients))
+                return false;
+            if(!updateParameter(optimizationTag
+                , weightGradients
+                , biasGradients))
+                return false;
+            
+            for(auto &&layer : mLayers)
+                layer->updateDropout();
+            for(auto &&gradient : weightGradients)
+                gradient->data().apply([](T in){return T{0};});
+            for(auto &&gradient : biasGradients)
+                gradient->data().apply([](T in){return T{0};});
+        }
+
+        auto &&error{calculateError(validationInput, validationOutput, errorTag)};
+        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
+            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
+
+        stoppingCount
+            = error < minError
+                ? (minError = error, 0ull) // assign and return 0
+                : stoppingCount + 1ull;
+
+        if(stoppingCount == earlyStopping)
+        {
+            std::cout << "early stopping has been activated."
+                << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
+            break;
+        }
+    }
+
     return true;
 }
 
@@ -459,29 +407,26 @@ std::deque<std::size_t> NeuralNetwork<T>::createTrainingIndices(std::size_t trai
 }
 
 template<class T>
-bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput)
+bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput
+    , bool isTraining)
 {
-    auto &&prevLayerIter{mLayers.begin()};
-    auto &&nextLayerIter{std::next(mLayers.begin())};
+    auto &&layerIter{mLayers.begin()};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
 
-    // input layer
-    (*prevLayerIter)->input(trainingInput);
-    if(!(*prevLayerIter)->activate())
+    if(!(*layerIter)->activate(trainingInput, isTraining))
         return false;
-    
-    // others
-    for(;
-        nextLayerIter != mLayers.end();
-        prevLayerIter++
-            , nextLayerIter++
+
+    for(layerIter++;
+        layerIter != mLayers.end();
+        layerIter++
             , weightIter++
             , biasIter++)
     {
-        (*nextLayerIter)->input((*prevLayerIter)->output() * (*weightIter)->data());
-        (*nextLayerIter)->input() += (*biasIter)->data();
-        if(!(*nextLayerIter)->activate())
+        if(!(*layerIter)->activate((*std::prev(layerIter))->output()
+            , (*weightIter)->data()
+            , (*biasIter)->data()
+            , isTraining))
             return false;
     }
 
@@ -495,67 +440,30 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
 {
     // reverse iterators
-    auto &&prevLayerIter{std::next(mLayers.rbegin())};
-    auto &&nextLayerIter{mLayers.rbegin()};
+    auto &&layerIter{mLayers.rbegin()};
     auto &&weightIter{mWeights.rbegin()};
     auto &&biasIter{mBiases.rbegin()};
     auto &&weightGradientIter{weightGradients.rbegin()};
     auto &&biasGradientIter{biasGradients.rbegin()};
 
-    auto &&derivativeErrorFunction{FUNCTION::derivativeErrorFunction<T>(errorTag)};
-    auto &&derivativeActivationFunction{FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag())};
-
     // output layer
-    Matrix<T> error{derivativeErrorFunction(trainingOutput, (*nextLayerIter)->output())};
-    Matrix<T> dActivation{derivativeActivationFunction((*nextLayerIter)->output())};
-    switch((*nextLayerIter)->activationTag())
-    {
-        case(ActivationTag::NONE):
-        case(ActivationTag::ELU):
-        case(ActivationTag::SIGMOID):
-        case(ActivationTag::RELU):
-            for(std::size_t c{0ull}; c < error.column(); c++)
-                error[0ull][c] = error[0ull][c] * dActivation[0ull][c];
-            break;
-        case(ActivationTag::SOFTMAX):
-            error = error * dActivation;
-            break;
-    }
-
-    (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
+    Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->output()))};
+    (*weightGradientIter)->data() += ~(*std::next(layerIter))->output() * error;
     (*biasGradientIter)->data() += error;
 
     // others
-    for(prevLayerIter++
-            , nextLayerIter++
+    for(layerIter++
             , weightGradientIter++
             , biasGradientIter++;
-        prevLayerIter != mLayers.rend();
-        prevLayerIter++
-            , nextLayerIter++
+        std::next(layerIter) != mLayers.rend();
+        layerIter++
             , weightIter++
             , biasIter++
             , weightGradientIter++
             , biasGradientIter++)
     {
-        derivativeActivationFunction = FUNCTION::derivativeActivationFunction<T>((*nextLayerIter)->activationTag());
-        error = error * ~(*weightIter)->data();
-        dActivation = derivativeActivationFunction((*nextLayerIter)->output());
-        switch((*nextLayerIter)->activationTag())
-        {
-            case(ActivationTag::ELU):
-            case(ActivationTag::NONE):
-            case(ActivationTag::RELU):
-            case(ActivationTag::SIGMOID):
-                for(std::size_t c{0ull}; c < error.column(); c++)
-                    error[0ull][c] *= dActivation[0ull][c];
-                break;
-            case(ActivationTag::SOFTMAX):
-                error = error * dActivation;
-                break;
-        }
-
-        (*weightGradientIter)->data() += ~(*prevLayerIter)->output() * error;
+        error = (*layerIter)->error(error * ~(*weightIter)->data());
+        (*weightGradientIter)->data() += ~(*std::next(layerIter))->output() * error;
         (*biasGradientIter)->data() += error;
     }
 
@@ -688,36 +596,11 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
         inputIter++
             , outputIter++)
     {
-        propagate(*inputIter);
+        propagate(*inputIter, true);
         error += errorFunction((*outputIter), mLayers.back()->output());
     }
 
     return error;
-}
-
-template<class T>
-template<class U>
-void NeuralNetwork<T>::writeValue(std::ofstream &stream
-    , U &&value) const
-{
-    static const char padding[256]{0};
-
-    stream.write(reinterpret_cast<const char*>(&padding)
-        , (alignof(U) - stream.tellp() % alignof(U)) % alignof(U));
-    stream.write(reinterpret_cast<const char*>(&value)
-        , sizeof(U));
-}
-
-template<class T>
-template<class U>
-U NeuralNetwork<T>::readValue(std::ifstream &stream) const
-{
-    U value;
-    stream.seekg((alignof(U) - stream.tellg() % alignof(U)) % alignof(U)
-        , std::ios_base::cur);
-    stream.read(reinterpret_cast<char*>(&value)
-        , sizeof(U));
-    return value;
 }
 
 template<class T>

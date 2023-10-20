@@ -3,6 +3,8 @@
 
 #include "matrix/matrix.hpp"
 #include "neural_network/neural_network.hpp"
+#include "neural_network/saver.hpp"
+#include "neural_network/loader.hpp"
 
 int main(int argc, char **argv)
 {
@@ -10,7 +12,7 @@ int main(int argc, char **argv)
 
     NeuralNetwork<double> mlp;
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::NONE});
-    mlp.addLayer(new Layer<double>{4ull, ActivationTag::SOFTMAX});
+    mlp.addLayer(new Layer<double>{4ull, ActivationTag::ELU});
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::SOFTMAX});
 
     std::vector<Matrix<double>> trainingInput;
@@ -60,7 +62,7 @@ int main(int argc, char **argv)
     testInput = trainingInput;
     testOutput = trainingOutput;
  
-    mlp.train(1'000ull
+    mlp.train(10'000ull
         , 4ull
         , ErrorTag::CATEGORICAL_CROSS_ENTROPY
         , OptimizationTag::ADAM
@@ -70,7 +72,7 @@ int main(int argc, char **argv)
         , validationOutput
         , testInput
         , testOutput
-        , true);
+        , 100'000);
 
     Matrix<double> result;
     mlp.predict(inputA, result);
@@ -82,9 +84,19 @@ int main(int argc, char **argv)
     mlp.predict(inputD, result);
     std::cout << inputD << ": " << result << std::endl;
 
-    mlp.save("test.out");
+    std::ofstream ostream{"test.out", std::ios::out | std::ios::binary};
+    if(!ostream.is_open()
+        || !Saver::save(ostream, mlp))
+        return 1;
+    ostream.close();
+
     NeuralNetwork<double> newMlp;
-    newMlp.load("test.out");
+    std::ifstream istream{"test.out", std::ios::in | std::ios::binary};
+    if(!istream.is_open())
+        return 2;
+    if(!Loader::load(istream, newMlp))
+        return 3;
+
     newMlp.predict(inputA, result);
     std::cout << inputA << ": " << result << std::endl;
     newMlp.predict(inputB, result);
