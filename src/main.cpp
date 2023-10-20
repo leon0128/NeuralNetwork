@@ -10,9 +10,9 @@ int main(int argc, char **argv)
 
     NeuralNetwork<double> mlp;
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::NONE});
-    mlp.addLayer(new Layer<double>{32ull, ActivationTag::ELU, 1.0});
-    mlp.addLayer(new Layer<double>{32ull, ActivationTag::ELU, 1.0});
-    mlp.addLayer(new Layer<double>{32ull, ActivationTag::ELU, 1.0});
+    mlp.addLayer(new Layer<double>{32ull, ActivationTag::ELU});
+    mlp.addLayer(new Layer<double>{32ull, ActivationTag::ELU, 0.2});
+    mlp.addLayer(new Layer<double>{32ull, ActivationTag::ELU});
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::SOFTMAX});
 
     std::vector<Matrix<double>> trainingInput;

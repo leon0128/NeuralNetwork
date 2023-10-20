@@ -452,9 +452,8 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
         }
 
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
-        // if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
-        //     std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
-        std::cout << epoch + 1ull << "," << error << std::endl;
+        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
+            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
 
         stoppingCount
             = error < minError

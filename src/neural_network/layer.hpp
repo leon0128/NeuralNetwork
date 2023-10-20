@@ -15,7 +15,7 @@ class Layer
 public:
     Layer(std::size_t column
         , ActivationTag tag
-        , double dropoutRate = 1.0);
+        , double dropoutRate = 0.0);
 
     ActivationTag activationTag() const noexcept
         {return mActivationTag;}
@@ -57,7 +57,6 @@ private:
         , const Matrix<T> &bias)
         {return activateForPrediction(prevOut * weight * mDropoutRate + bias);}
     
-
     ActivationTag mActivationTag;
     Matrix<T> mInput;
     Matrix<T> mOutput;
@@ -81,7 +80,7 @@ Layer<T>::Layer(std::size_t column
 template<class T>
 bool Layer<T>::updateDropout()
 {
-    mDropout.apply([&](T in){return static_cast<T>(RANDOM.floating() <= mDropoutRate);});
+    mDropout.apply([&](T in){return static_cast<T>(RANDOM.floating() >= mDropoutRate);});
     return true;
 }
 
