@@ -24,8 +24,6 @@ inline const double adamLearningRate{0.001};
 inline const double adamBeta1{0.9};
 inline const double adamBeta2{0.999};
 inline const double adamEpsilon{1.0e-7};
-inline Matrix<double> adamM{};
-inline Matrix<double> adamV{};
 
 template<class T>
 inline Matrix<T> activationNone(const Matrix<T> &input)
@@ -178,7 +176,10 @@ inline Matrix<T> optimizationNone(const Matrix<T> &prev, const Matrix<T> &gradie
 }
 
 template<class T>
-inline Matrix<T> adam(const Matrix<T> &prev, const Matrix<T> &gradient)
+inline Matrix<T> adam(const Matrix<T> &prev
+    , const Matrix<T> &gradient
+    , Matrix<T> &adamM
+    , Matrix<T> &adamV)
 {
     Matrix<T> parameter{prev.row(), prev.column()};
     for(std::size_t r{0ull}; r < gradient.row(); r++)
@@ -228,20 +229,6 @@ inline std::function<T(const Matrix<T>&, const Matrix<T>&)> errorFunction(ErrorT
             return categoricalCrossEntropy<T>;
         case(ErrorTag::NONE):
             throw std::runtime_error{"invalid error tag"};
-    }
-
-    return {};
-}
-
-template<class T>
-inline std::function<Matrix<T>(const Matrix<T>&, const Matrix<T>&)> optimizationFunction(OptimizationTag tag)
-{
-    switch(tag)
-    {
-        case(OptimizationTag::ADAM):
-            return adam<T>;
-        case(OptimizationTag::NONE):
-            return optimizationNone<T>;
     }
 
     return {};
