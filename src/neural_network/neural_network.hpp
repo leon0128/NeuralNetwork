@@ -49,7 +49,7 @@ public:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
-        , std::size_t earlyStopping = 5ull);
+        , std::size_t earlyStoppingLimit = 5ull);
 
     bool predict(const Matrix<T> &input
         , Matrix<T> &output);
@@ -65,7 +65,7 @@ private:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
-        , std::size_t earlyStopping) const;
+        , std::size_t earlyStoppingLimit) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
     bool trainParameter(std::size_t epochSize
@@ -76,7 +76,7 @@ private:
         , const std::vector<Matrix<T>> &trainingOutput
         , const std::vector<Matrix<T>> &validationInput
         , const std::vector<Matrix<T>> &validationOutput
-        , std::size_t earlyStopping);
+        , std::size_t earlyStoppingLimit);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
     bool propagate(const Matrix<T> &trainingInput
@@ -98,6 +98,12 @@ private:
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
+    bool shouldStopEarly(T error
+        , T &minError
+        , std::size_t earlyStoppingLimit
+        , std::size_t &stoppingCount
+        , std::list<std::shared_ptr<Weight<T>>> &minWeights
+        , std::list<std::shared_ptr<Bias<T>>> &minBiases);
 
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
@@ -160,7 +166,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
-    , std::size_t earlyStopping)
+    , std::size_t earlyStoppingLimit)
 {
     if(!checkValidity(epochSize
         , batchSize
@@ -172,7 +178,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , validationOutput
         , testInput
         , testOutput
-        , earlyStopping))
+        , earlyStoppingLimit))
         return false;
 
     if(!randomizeParameter())
@@ -186,7 +192,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , trainingOutput
         , validationInput
         , validationOutput
-        , earlyStopping))
+        , earlyStoppingLimit))
         return false;
 
     std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
@@ -219,7 +225,7 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
-    , std::size_t earlyStopping) const
+    , std::size_t earlyStoppingLimit) const
 {
     auto &&checkMatrixValidity{[](auto &&vec, auto &&columnSize)
         -> bool
@@ -256,7 +262,7 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
         || !checkMatrixValidity(testOutput, mLayers.back()->output().column()))
         return trainingError("data's elements does not match layer's io.");
 
-    if(earlyStopping == 0ull)
+    if(earlyStoppingLimit == 0ull)
         return trainingError("condition of early stopping is invalid.");
 
     for(auto &&layer : mLayers)
@@ -326,12 +332,14 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     , const std::vector<Matrix<T>> &trainingOutput
     , const std::vector<Matrix<T>> &validationInput
     , const std::vector<Matrix<T>> &validationOutput
-    , std::size_t earlyStopping)
+    , std::size_t earlyStoppingLimit)
 {
     T minError{std::numeric_limits<T>::max()};
     std::size_t stoppingCount{0ull};
     std::list<std::shared_ptr<Weight<T>>> weightGradients;
     std::list<std::shared_ptr<Bias<T>>> biasGradients;
+    std::list<std::shared_ptr<Weight<T>>> minWeights;
+    std::list<std::shared_ptr<Bias<T>>> minBiases;
     std::list<Matrix<T>> weightAdamMs;
     std::list<Matrix<T>> biasAdamMs;
     std::list<Matrix<T>> weightAdamVs;
@@ -339,12 +347,14 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     for(auto &&weight : mWeights)
     {
         weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
+        minWeights.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
         weightAdamMs.emplace_back(weight->data().row(), weight->data().column());
         weightAdamVs.emplace_back(weight->data().row(), weight->data().column());
     }
     for(auto &&bias : mBiases)
     {
         biasGradients.emplace_back(new Bias<T>{bias->data().column()});
+        minBiases.emplace_back(new Bias<T>{bias->data().column()});
         biasAdamMs.emplace_back(bias->data().row(), bias->data().column());
         biasAdamVs.emplace_back(bias->data().row(), bias->data().column());
     }
@@ -392,18 +402,29 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
         if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
             std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
 
-        stoppingCount
-            = error < minError
-                ? (minError = error, 0ull) // assign and return 0
-                : stoppingCount + 1ull;
-
-        if(stoppingCount == earlyStopping)
+        if(shouldStopEarly(error
+            , minError
+            , earlyStoppingLimit
+            , stoppingCount
+            , minWeights
+            , minBiases))
         {
             std::cout << "early stopping has been activated."
                 << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
             break;
         }
     }
+
+    for(auto &&weight : mWeights)
+        delete weight;
+    for(auto &&bias : mBiases)
+        delete bias;
+    mWeights.clear();
+    mBiases.clear();
+    for(auto &&minWeight : minWeights)
+        mWeights.push_back(new Weight{std::move(*minWeight)});
+    for(auto &&minBias : minBiases)
+        mBiases.push_back(new Bias{std::move(*minBias)});
 
     return true;
 }
@@ -577,11 +598,36 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
         inputIter++
             , outputIter++)
     {
-        propagate(*inputIter, true);
+        propagate(*inputIter, false);
         error += errorFunction((*outputIter), mLayers.back()->output());
     }
 
     return error;
+}
+
+template<class T>
+bool NeuralNetwork<T>::shouldStopEarly(T error
+    , T &minError
+    , std::size_t earlyStoppingLimit
+    , std::size_t &stoppingCount
+    , std::list<std::shared_ptr<Weight<T>>> &minWeights
+    , std::list<std::shared_ptr<Bias<T>>> &minBiases)
+{
+    if(error < minError)
+    {
+        minError = error;
+        stoppingCount = 0ull;
+        minWeights.clear();
+        minBiases.clear();
+        for(auto &&weight : mWeights)
+            minWeights.emplace_back(new Weight{*weight});
+        for(auto &&bias : mBiases)
+            minBiases.emplace_back(new Bias{*bias});
+    }
+    else
+        stoppingCount++;
+
+    return stoppingCount == earlyStoppingLimit;
 }
 
 template<class T>
