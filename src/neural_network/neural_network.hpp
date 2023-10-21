@@ -90,7 +90,11 @@ private:
         , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
     bool updateParameter(OptimizationTag optimizationTag
         , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-        , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
+        , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+        , std::list<Matrix<T>> &weightAdamMs
+        , std::list<Matrix<T>> &biasAdamMs
+        , std::list<Matrix<T>> &weightAdamVs
+        , std::list<Matrix<T>> &biasAdamVs);
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
@@ -328,10 +332,22 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     std::size_t stoppingCount{0ull};
     std::list<std::shared_ptr<Weight<T>>> weightGradients;
     std::list<std::shared_ptr<Bias<T>>> biasGradients;
+    std::list<Matrix<T>> weightAdamMs;
+    std::list<Matrix<T>> biasAdamMs;
+    std::list<Matrix<T>> weightAdamVs;
+    std::list<Matrix<T>> biasAdamVs;
     for(auto &&weight : mWeights)
+    {
         weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
+        weightAdamMs.emplace_back(weight->data().row(), weight->data().column());
+        weightAdamVs.emplace_back(weight->data().row(), weight->data().column());
+    }
     for(auto &&bias : mBiases)
+    {
         biasGradients.emplace_back(new Bias<T>{bias->data().column()});
+        biasAdamMs.emplace_back(bias->data().row(), bias->data().column());
+        biasAdamVs.emplace_back(bias->data().row(), bias->data().column());
+    }
 
     for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
     {
@@ -357,7 +373,11 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
                 return false;
             if(!updateParameter(optimizationTag
                 , weightGradients
-                , biasGradients))
+                , biasGradients
+                , weightAdamMs
+                , biasAdamMs
+                , weightAdamVs
+                , biasAdamVs))
                 return false;
             
             for(auto &&layer : mLayers)
@@ -488,35 +508,12 @@ bool NeuralNetwork<T>::calculateAverage(std::size_t batchSize
 template<class T>
 bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
     , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-    , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
+    , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+    , std::list<Matrix<T>> &weightAdamMs
+    , std::list<Matrix<T>> &biasAdamMs
+    , std::list<Matrix<T>> &weightAdamVs
+    , std::list<Matrix<T>> &biasAdamVs)
 {
-    static std::list<Matrix<T>> weightAdamMs{};
-    static std::list<Matrix<T>> biasAdamMs{};
-    static std::list<Matrix<T>> weightAdamVs{};
-    static std::list<Matrix<T>> biasAdamVs{};
-    static bool isInitialized{false};
-    if(!isInitialized)
-    {
-        for(auto &&gradient : weightGradients)
-        {
-            weightAdamMs.emplace_back(gradient->data().row()
-                , gradient->data().column());
-            weightAdamVs.emplace_back(gradient->data().row()
-                , gradient->data().column());
-        }
-        for(auto &&gradient : biasGradients)
-        {
-            biasAdamMs.emplace_back(gradient->data().row()
-                , gradient->data().column());
-            biasAdamVs.emplace_back(gradient->data().row()
-                , gradient->data().column());
-        }
-        isInitialized = true;
-    }
-
-
-    auto &&optimizationFunction{FUNCTION::optimizationFunction<T>(optimizationTag)};
-
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
     auto &&weightGradientIter{weightGradients.begin()};
@@ -540,40 +537,24 @@ bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
         switch(optimizationTag)
         {
             case(OptimizationTag::NONE):
+                (*weightIter)->data()
+                    = FUNCTION::optimizationNone((*weightIter)->data()
+                        , (*weightGradientIter)->data());
+                (*biasIter)->data()
+                    = FUNCTION::optimizationNone((*biasIter)->data()
+                        , (*biasGradientIter)->data());
                 break;
             case(OptimizationTag::ADAM):
-                FUNCTION::adamM = *weightAdamMIter;
-                FUNCTION::adamV = *weightAdamVIter;
-                break;
-        }
-
-        (*weightIter)->data()
-            = optimizationFunction((*weightIter)->data()
-                , (*weightGradientIter)->data());
-
-        switch(optimizationTag)
-        {
-            case(OptimizationTag::NONE):
-                break;
-            case(OptimizationTag::ADAM):
-                *weightAdamMIter = FUNCTION::adamM;
-                *weightAdamVIter = FUNCTION::adamV;
-                FUNCTION::adamM = *biasAdamMIter;
-                FUNCTION::adamV = *biasAdamVIter;
-                break;
-        }
-
-        (*biasIter)->data()
-            = optimizationFunction((*biasIter)->data()
-                , (*biasGradientIter)->data());
-
-        switch(optimizationTag)
-        {
-            case(OptimizationTag::NONE):
-                break;
-            case(OptimizationTag::ADAM):
-                *biasAdamMIter = FUNCTION::adamM;
-                *biasAdamVIter = FUNCTION::adamV;
+                (*weightIter)->data()
+                    = FUNCTION::adam((*weightIter)->data()
+                        , (*weightGradientIter)->data()
+                        , *weightAdamMIter
+                        , *weightAdamVIter);
+                (*biasIter)->data()
+                    = FUNCTION::adam((*biasIter)->data()
+                        , (*biasGradientIter)->data()
+                        , *biasAdamMIter
+                        , *biasAdamVIter);
                 break;
         }
     }
