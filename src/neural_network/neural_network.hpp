@@ -375,10 +375,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
                 return false;
             
             if((trainingIndices.size() - 1ull) % batchSize != 0ull)
-            {
-                std::cout << "\r" << trainingIndices.size() << " left in epoch " << epoch + 1ull << "          ";
                 continue;
-            }
             
             if(!calculateAverage(batchSize
                 , weightGradients
