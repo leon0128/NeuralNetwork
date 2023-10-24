@@ -308,7 +308,7 @@ bool NeuralNetwork<T>::randomizeParameter()
             case(ActivationTag::SOFTMAX):
             case(ActivationTag::RELU):
             {
-                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*std::prev(layerIter))->output().column())};
+                std::normal_distribution<T> dist{T{0}, std::sqrt(T{2} / static_cast<T>((*std::prev(layerIter))->output().column()))};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
                     for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
                         (*weightIter)->data()[r][c] = dist(RANDOM.engine());
