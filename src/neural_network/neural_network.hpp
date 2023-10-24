@@ -604,7 +604,7 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
         error += errorFunction((*outputIter), mLayers.back()->output());
     }
 
-    return error;
+    return error / (inputs.empty() ? T{1} : static_cast<T>(inputs.size()));
 }
 
 template<class T>
