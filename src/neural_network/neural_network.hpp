@@ -195,7 +195,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , earlyStoppingLimit))
         return false;
 
-    std::cout << "\rerror: " << calculateError(testInput, testOutput, errorTag) << std::endl;
+    std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
 
     return true;
 }
@@ -396,13 +396,12 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
                 gradient->data().apply([](T in){return T{0};});
             for(auto &&gradient : biasGradients)
                 gradient->data().apply([](T in){return T{0};});
-
-            std::cout << "\r" << trainingIndices.size() << " left in epoch " << epoch + 1ull << "          ";
+        
+            std::cout << "\rremaining data: " << trainingIndices.size() - 1ull << "          ";
         }
 
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
-        if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
-            std::cout << "\repoch " << epoch + 1ull << "'s error: " << error << std::endl;
+        std::cout << "\repoch " << epoch + 1ull << "'s error: " << error << std::endl;
 
         if(shouldStopEarly(error
             , minError
@@ -411,7 +410,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             , minWeights
             , minBiases))
         {
-            std::cout << "\rearly stopping has been activated."
+            std::cout << "early stopping has been activated."
                 << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
             break;
         }
