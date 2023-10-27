@@ -55,12 +55,12 @@ private:
     bool activateForTraining(const Matrix<T> &prevOut
         , const Matrix<T> &weight
         , const Matrix<T> &bias)
-        {return activateForTraining(prevOut * weight + bias);}
+        {return activateForTraining(matmul(prevOut, weight) + bias);}
     bool activateForPrediction(const Matrix<T> &in);
     bool activateForPrediction(const Matrix<T> &prevOut
         , const Matrix<T> &weight
         , const Matrix<T> &bias)
-        {return activateForPrediction(prevOut * weight * (T{1} - mDropoutRate) + bias);}
+        {return activateForPrediction(matmul(prevOut, weight) * (static_cast<T>(1) - mDropoutRate) + bias);}
     
     std::size_t mColumn;
     ActivationTag mActivationTag;
@@ -87,7 +87,10 @@ Layer<T>::Layer(std::size_t column
 template<class T>
 bool Layer<T>::updateDropout()
 {
-    mDropout.apply([&](T in){return static_cast<T>(RANDOM.floating() >= mDropoutRate);});
+    // mDropout = mDropout.apply([&](T t){return static_cast<T>(RANDOM.floating<T>() >= mDropoutRate);});
+    for(std::size_t r{0ull}; r < mDropout.row(); r++)
+        for(std::size_t c{0ull}; c < mDropout.column(); c++)
+            mDropout(r, c) = static_cast<T>(RANDOM.floating<T>() >= static_cast<T>(mDropoutRate));
     return true;
 }
 
@@ -97,9 +100,7 @@ bool Layer<T>::activateForTraining(const Matrix<T> &in)
     auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
     
     mInput = in;
-    mOutput = activationFunction(mInput);
-    for(std::size_t c{0ull}; c < mOutput.column(); c++)
-        mOutput[0ull][c] *= mDropout[0ull][c];
+    mOutput = activationFunction(mInput) * mDropout;
     return true;
 }
 
@@ -125,18 +126,14 @@ Matrix<T> Layer<T>::error(const Matrix<T> &dError) const
         case(ActivationTag::ELU):
         case(ActivationTag::SIGMOID):
         case(ActivationTag::RELU):
-            for(std::size_t c{0ull}; c < result.column(); c++)
-                result[0ull][c] *= dError[0ull][c];
+            result *= dError;
             break;
         case(ActivationTag::SOFTMAX):
-            result = dError * result;
+            result = matmul(dError, result);
             break;
     }
 
-    for(std::size_t c{0ull}; c < result.column(); c++)
-        result[0ull][c] *= mDropout[0ull][c];
-
-    return result;
+    return result *= mDropout;
 }
 
 }

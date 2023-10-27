@@ -308,12 +308,12 @@ bool NeuralNetwork<T>::randomizeParameter()
             case(ActivationTag::SOFTMAX):
             case(ActivationTag::RELU):
             {
-                std::normal_distribution<T> dist{0.0, std::sqrt(2.0 / (*std::prev(layerIter))->output().column())};
+                std::normal_distribution<T> dist{static_cast<T>(0), std::sqrt(static_cast<T>(2) / (*std::prev(layerIter))->output().column())};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
                     for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
-                        (*weightIter)->data()[r][c] = dist(RANDOM.engine());
-                for(std::size_t c{0ull}; c < (*biasIter)->data().column(); c++)
-                    (*biasIter)->data()[0ull][c] = 0.1;
+                        (*weightIter)->data()(r, c) = dist(RANDOM.engine());
+
+                (*biasIter)->data() = static_cast<T>(0.1);
 
                 break;
             }
@@ -365,6 +365,8 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             !trainingIndices.empty();
             trainingIndices.pop_front())
         {
+            std::cout << "remaining data of epoch " << epoch + 1ull << ": " << trainingIndices.size() << std::string(20, ' ') << '\r' << std::flush;
+
             std::size_t trainingIndex{trainingIndices.front()};
             if(!propagate(trainingInput[trainingIndex], true))
                 return false;
@@ -393,9 +395,9 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             for(auto &&layer : mLayers)
                 layer->updateDropout();
             for(auto &&gradient : weightGradients)
-                gradient->data().apply([](T in){return T{0};});
+                gradient->data() = static_cast<T>(0);
             for(auto &&gradient : biasGradients)
-                gradient->data().apply([](T in){return T{0};});
+                gradient->data() = static_cast<T>(0);
         }
 
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
@@ -489,7 +491,7 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
 
     // output layer
     Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->output()))};
-    (*weightGradientIter)->data() += ~(*std::next(layerIter))->output() * error;
+    (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->output(), error);
     (*biasGradientIter)->data() += error;
 
     // others
@@ -503,8 +505,8 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
             , weightGradientIter++
             , biasGradientIter++)
     {
-        error = (*layerIter)->error(error * ~(*weightIter)->data());
-        (*weightGradientIter)->data() += ~(*std::next(layerIter))->output() * error;
+        error = (*layerIter)->error(matmul(error, ~(*weightIter)->data()));
+        (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->output(), error);
         (*biasGradientIter)->data() += error;
     }
 
@@ -519,9 +521,9 @@ bool NeuralNetwork<T>::calculateAverage(std::size_t batchSize
     T denominator{static_cast<T>(batchSize)};
 
     for(auto &&gradient : weightGradients)
-        gradient->data().apply([&](T in){return in / denominator;});
+        gradient->data() /= denominator;
     for(auto &&gradient : biasGradients)
-        gradient->data().apply([&](T in){return in / denominator;});
+        gradient->data() /= denominator;
 
     return true;
 }

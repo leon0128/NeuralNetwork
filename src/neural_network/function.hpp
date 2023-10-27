@@ -31,101 +31,50 @@ inline Matrix<T> activationNone(const Matrix<T> &input)
 
 template<class T>
 inline Matrix<T> elu(const Matrix<T> &input)
-{
-    Matrix<T> output{input};
-    output.apply([](T in){return in >= T{0} ? in : std::exp(in) - T{eluAlpha};});
-    return output;
-}
+    {return input.apply([](T t){return t >= static_cast<T>(0) ? t : std::exp(t) - static_cast<T>(eluAlpha);});}
 
 template<class T>
 inline Matrix<T> sigmoid(const Matrix<T> &input)
-{
-    Matrix<T> output{input};
-    output.apply([](T in){return T{1} / (T{1} + std::exp(T{-1} * in));});
-    return output;
-}
+    {return input.apply([](T t){return static_cast<T>(1) / (static_cast<T>(1) + std::exp(static_cast<T>(-1) * t));});}
 
 template<class T>
 inline Matrix<T> relu(const Matrix<T> &input)
-{
-    Matrix<T> output{input};
-    output.apply([](T in){return in >= T{0} ? in : T{0};});
-    return output;
-}
+    {return input.apply([](T t){return t >= static_cast<T>(0) ? t : static_cast<T>(0);});}
 
 template<class T>
 inline Matrix<T> softmax(const Matrix<T> &input)
 {
-    Matrix<T> output{input};
-    T sum{0};
-    output.apply([&](T in){double out{std::exp(in)}; sum += out; return out;});
-    output.apply([&](T in){return in / sum;});
-    return output;
+    Matrix output{exp(input)};
+    return output /= output.sum();
 }
 
 template<class T>
 inline T mse(const Matrix<T> &teacher, const Matrix<T> &output)
-{
-    T error{0};
-    for(std::size_t r{0ull}; r < teacher.row(); r++)
-        for(std::size_t c{0ull}; c < teacher.column(); c++)
-            error += std::pow(teacher[r][c] - output[r][c], T{2});
-
-    return error / T{2};
-}
+    {return pow(teacher - output, static_cast<T>(2)).sum() / static_cast<T>(2);}
 
 template<class T>
 inline T binaryCrossEntropy(const Matrix<T> &teacher, const Matrix<T> &output)
-{
-    T error{0};
-    for(std::size_t r{0ull}; r < teacher.row(); r++)
-        for(std::size_t c{0ull}; c < teacher.column(); c++)
-            error += teacher[r][c] * std::log(output[r][c])
-                + (T{1} - teacher[r][c]) * std::log(T{1} - output[r][c]);
-    return error * T{-1};
-}
+    {return -((teacher * log(output) + (static_cast<T>(1) - teacher) * log(static_cast<T>(1) - output)).sum());}
 
 template<class T>
 inline T categoricalCrossEntropy(const Matrix<T> &teacher, const Matrix<T> &output)
-{
-    T error{0};
-    for(std::size_t r{0ull}; r < teacher.row(); r++)
-        for(std::size_t c{0ull}; c < teacher.column(); c++)
-            error += teacher[r][c] * std::log(output[r][c]);
-    return error * T{-1};
-}
+    {return -((teacher * log(output)).sum());}
 
 template<class T>
 inline Matrix<T> derivativeActivationNone(const Matrix<T> &output)
-{
-    Matrix<T> derivative{output.row(), output.column()};
-    derivative.apply([](T in){return T{1};});
-    return derivative;
-}
+    {return Matrix<T>{output.row(), output.column(), static_cast<T>(1)};}
 
 template<class T>
 inline Matrix<T> derivativeElu(const Matrix<T> &output)
-{
-    Matrix<T> derivative{output};
-    derivative.apply([](T in){return in >= T{0} ? T{1} : in + eluAlpha;});
-    return derivative;
-}
+    {return output.apply([](T t){return t >= static_cast<T>(0) ? static_cast<T>(1) : t + static_cast<T>(eluAlpha);});}
 
 template<class T>
 inline Matrix<T> derivativeSigmoid(const Matrix<T> &output)
-{
-    Matrix<T> derivative{output};
-    derivative.apply([](T in){return in * (T{1} - in);});
-    return derivative;
-}
+    {return output * (static_cast<T>(1) - output);}
 
 template<class T>
 inline Matrix<T> derivativeRelu(const Matrix<T> &output)
-{
-    Matrix<T> derivative{output};
-    derivative.apply([](T in){return in >= T{0} ? T{1} : T{0};});
-    return derivative;
-}
+    {return output.apply([](T t){return t >= static_cast<T>(0) ? static_cast<T>(1) : static_cast<T>(0);});}
 
 template<class T>
 inline Matrix<T> derivativeSoftmax(const Matrix<T> &output)
@@ -133,47 +82,28 @@ inline Matrix<T> derivativeSoftmax(const Matrix<T> &output)
     Matrix<T> derivative{output.column(), output.column()};
     for(std::size_t r{0ull}; r < derivative.row(); r++)
         for(std::size_t c{0ull}; c < derivative.column(); c++)
-            derivative[r][c]
+            derivative(r, c)
                 = r == c
-                    ? output[0ull][r] * (T{1} - output[0ull][c])
-                    : T{-1} * output[0ull][r] * output[0ull][c];
+                    ? output(0, r) * (static_cast<T>(1) - output(0, c))
+                    : -(output(0, r) * output(0, c));
     return derivative;
 }
 
 template<class T>
 inline Matrix<T> derivativeMse(const Matrix<T> &teacher, const Matrix<T> &output)
-{
-    return output - teacher;
-}
+    {return output - teacher;}
 
 template<class T>
 inline Matrix<T> derivativeBinaryCrossEntropy(const Matrix<T> &teacher, const Matrix<T> &output)
-{
-    Matrix<T> derivative{teacher.row(), teacher.column()};
-    for(std::size_t r{0ull}; r < derivative.row(); r++)
-        for(std::size_t c{0ull}; c < derivative.column(); c++)
-            derivative[r][c] = (T{1} - teacher[r][c]) / (T{1} - output[r][c])
-                - teacher[r][c] / output[r][c];
-    return derivative;            
-}
+    {return (static_cast<T>(1) - teacher) / (static_cast<T>(1) - output) - teacher / output;}
 
 template<class T>
 inline Matrix<T> derivativeCategoricalCrossEntropy(const Matrix<T> &teacher, const Matrix<T> &output)
-{
-    Matrix<T> derivative{teacher.row(), teacher.column()};
-    for(std::size_t r{0ull}; r < derivative.row(); r++)
-        for(std::size_t c{0ull}; c < derivative.column(); c++)
-            derivative[r][c] = T{-1} * teacher[r][c] / output[r][c];
-    return derivative;
-}
+    {return -(teacher / output);}
 
 template<class T>
 inline Matrix<T> optimizationNone(const Matrix<T> &prev, const Matrix<T> &gradient)
-{
-    Matrix<T> rhs{gradient};
-    rhs.apply([](T in){return in * optimizationNoneLearningRate;});
-    return prev - rhs;
-}
+    {return prev - gradient * static_cast<T>(optimizationNoneLearningRate);}
 
 template<class T>
 inline Matrix<T> adam(const Matrix<T> &prev
@@ -181,19 +111,9 @@ inline Matrix<T> adam(const Matrix<T> &prev
     , Matrix<T> &adamM
     , Matrix<T> &adamV)
 {
-    Matrix<T> parameter{prev.row(), prev.column()};
-    for(std::size_t r{0ull}; r < gradient.row(); r++)
-    {
-        for(std::size_t c{0ull}; c < gradient.column(); c++)
-        {
-            adamM[r][c] = adamBeta1 * adamM[r][c] + (T{1} - adamBeta1) * gradient[r][c];
-            adamV[r][c] = adamBeta2 * adamV[r][c] + (T{1} - adamBeta2) * std::pow(gradient[r][c], T{2});
-            double mHat{adamM[r][c] / (T{1} - adamBeta1)};
-            double vHat{adamV[r][c] / (T{1} - adamBeta2)};
-            parameter[r][c] = prev[r][c] - (adamLearningRate * mHat / (std::sqrt(vHat) + adamEpsilon));
-        }
-    }
-    return parameter;
+    adamM = static_cast<T>(adamBeta1) * adamM + (static_cast<T>(1) - static_cast<T>(adamBeta1)) * gradient;
+    adamV = static_cast<T>(adamBeta2) * adamV + (static_cast<T>(1) - static_cast<T>(adamBeta2)) * pow(gradient, static_cast<T>(2));
+    return prev - (static_cast<T>(adamLearningRate) * adamM / (static_cast<T>(1) - static_cast<T>(adamBeta1)) / (sqrt(adamV / (static_cast<T>(1) - static_cast<T>(adamBeta2))) + static_cast<T>(adamEpsilon)));
 }
 
 template<class T>

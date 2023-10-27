@@ -88,7 +88,7 @@ bool Saver::save(std::ostream &stream
     write(stream, matrix.column());
     for(std::size_t r{0ull}; r < matrix.row(); r++)
         for(std::size_t c{0ull}; c < matrix.column(); c++)
-            write(stream, matrix[r][c]);
+            write(stream, matrix(r, c));
 
     return static_cast<bool>(stream);
 }
