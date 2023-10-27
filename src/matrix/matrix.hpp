@@ -1,10 +1,12 @@
 #ifndef MATRIX_MATRIX_HPP
 #define MATRIX_MATRIX_HPP
 
+#include <utility>
 #include <ostream>
 #include <stdexcept>
 #include <cstddef>
 #include <functional>
+#include <valarray>
 
 template<class T>
 class Matrix
@@ -12,390 +14,376 @@ class Matrix
 public:
     using ValueType = T;
 
-    // create rowSize * columnSize matrix object
-    Matrix();
-    Matrix(std::size_t rowSize
-        , std::size_t columnSize);
-    Matrix(const Matrix<T>&);
-    Matrix(Matrix<T>&&);
-    Matrix &operator =(const Matrix<T> &other);
-    Matrix &operator =(Matrix<T> &&other);
-    ~Matrix();
+    inline Matrix();
+    inline Matrix(std::size_t rowSize
+        , std::size_t columnSize
+        , const ValueType &value = ValueType{});
+    inline Matrix(std::size_t rowSize
+        , std::size_t columnSize
+        , const std::valarray<ValueType>&);
+    inline Matrix(std::size_t rowSize
+        , std::size_t columnSize
+        , std::valarray<ValueType>&&);
+    inline Matrix(const Matrix&);
+    inline Matrix(Matrix&&);
+    inline Matrix &operator =(const Matrix &other);
+    inline Matrix &operator =(Matrix &&other);
+    inline Matrix &operator =(const ValueType &val)
+        {return mValarray = val, *this;}
 
-    std::size_t row() const noexcept
+    inline std::size_t row() const noexcept
         {return mRow;}
-    std::size_t column() const noexcept
+    inline std::size_t column() const noexcept
         {return mColumn;}
-    ValueType *data() noexcept
-        {return mData;}
-    const ValueType *data() const noexcept
-        {return mData;}
 
-    void apply(const std::function<ValueType(ValueType)> &func);
+    inline ValueType operator()(std::size_t r, std::size_t c) const
+        {return mValarray[r * mColumn + c];}
+    inline ValueType &operator()(std::size_t r, std::size_t c)
+        {return mValarray[r * mColumn + c];}
 
-    ValueType *operator [](std::size_t rowIndex)
-        {return &data()[rowIndex * column()];}
-    const ValueType *operator [](std::size_t rowIndex) const
-        {return &data()[rowIndex * column()];}
+    inline Matrix operator +() const
+        {return Matrix{mRow, mColumn, +mValarray};}
+    inline Matrix operator -() const
+        {return Matrix{mRow, mColumn, -mValarray};}
+    inline Matrix operator ~() const
+        {return Matrix{mColumn, mRow, mValarray[std::gslice(0, {mColumn, mRow}, {1, mColumn})]};}
 
-    Matrix &operator +=(const Matrix &rhs);
-    Matrix &operator +=(ValueType);
-    Matrix &operator -=(const Matrix &rhs);
-    Matrix &operator -=(ValueType);
-    Matrix &operator *=(ValueType);
-    Matrix &operator /=(ValueType);
+    inline Matrix &operator +=(const Matrix &rhs)
+        {return mValarray += rhs.mValarray, *this;}
+    inline Matrix &operator +=(const ValueType &rhs)
+        {return mValarray += rhs, *this;}
+    inline Matrix &operator -=(const Matrix &rhs)
+        {return mValarray -= rhs.mValarray, *this;}
+    inline Matrix &operator -=(const ValueType &rhs)
+        {return mValarray -= rhs, *this;}
+    inline Matrix &operator *=(const Matrix &rhs)
+        {return mValarray *= rhs.mValarray, *this;}
+    inline Matrix &operator *=(const ValueType &rhs)
+        {return mValarray *= rhs, *this;}
+    inline Matrix &operator /=(const Matrix &rhs)
+        {return mValarray /= rhs.mValarray, *this;}
+    inline Matrix &operator /=(const ValueType &rhs)
+        {return mValarray /= rhs, *this;}
+
+    inline void swap(Matrix &other);
+    inline ValueType sum() const
+        {return mValarray.sum();}
+    inline Matrix apply(ValueType func(ValueType)) const
+        {return Matrix{mRow, mColumn, mValarray.apply(func)};}
+    inline Matrix apply(ValueType func(const ValueType&)) const
+        {return Matrix{mRow, mColumn, mValarray.apply(func)};}
+    inline auto begin()
+        {return std::begin(mValarray);}
+    inline auto begin() const
+        {return std::begin(mValarray);}
+    inline auto end()
+        {return std::end(mValarray);}
+    inline auto end() const
+        {return std::end(mValarray);}
+
+    template<class U>
+    friend inline void swap(Matrix<U>&, Matrix<U>&) noexcept;
+    template<class CharT
+        , class TraitsT
+        , class U>
+    friend inline std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &stream
+        , const Matrix<U>&);
+    
+    template<class U>
+    friend inline Matrix<U> operator +(const Matrix<U> &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator +(const Matrix<U> &lhs
+        , const typename Matrix<U>::ValueType &rhs);
+    template<class U>
+    friend inline Matrix<U> operator +(const typename Matrix<U>::ValueType &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator -(const Matrix<U> &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator -(const Matrix<U> &lhs
+        , const typename Matrix<U>::ValueType &rhs);
+    template<class U>
+    friend inline Matrix<U> operator -(const typename Matrix<U>::ValueType &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator *(const Matrix<U> &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator *(const Matrix<U> &lhs
+        , const typename Matrix<U>::ValueType &rhs);
+    template<class U>
+    friend inline Matrix<U> operator *(const typename Matrix<U>::ValueType &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator /(const Matrix<U> &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> operator /(const Matrix<U> &lhs
+        , const typename Matrix<U>::ValueType &rhs);
+    template<class U>
+    friend inline Matrix<U> operator /(const typename Matrix<U>::ValueType &lhs
+        , const Matrix<U> &rhs);
+
+    template<class U>
+    friend inline Matrix<U> matmul(const Matrix<U> &lhs
+        , const Matrix<U> &rhs);
+    template<class U>
+    friend inline Matrix<U> exp(const Matrix<U>&);
+    template<class U>
+    friend inline Matrix<U> log(const Matrix<U>&);
+    template<class U>
+    friend inline Matrix<U> log10(const Matrix<U>&);
+    template<class U>
+    friend inline Matrix<U> pow(const Matrix<U> &base
+        , const Matrix<U> &exp);
+    template<class U>
+    friend inline Matrix<U> pow(const Matrix<U> &base
+        , const typename Matrix<U>::ValueType &exp);
+    template<class U>
+    friend inline Matrix<U> pow(const Matrix<U> &base
+        , const typename Matrix<U>::ValueType &exp);
+    template<class U>
+    friend inline Matrix<U> sqrt(const Matrix<U>&);
 
 private:
     std::size_t mRow; // row size
     std::size_t mColumn; // column size
-    ValueType *mData; // raw data
+    std::valarray<ValueType> mValarray;
 };
 
-template<class T>
-Matrix<T> operator +(const Matrix<T> &lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator +(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs);
-template<class T>
-Matrix<T> operator +(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator -(const Matrix<T> &lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator -(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs);
-template<class T>
-Matrix<T> operator -(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator *(const Matrix<T> &lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator *(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs);
-template<class T>
-Matrix<T> operator *(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator /(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs);
-template<class T>
-Matrix<T> operator /(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs);
-template<class T>
-Matrix<T> operator ~(const Matrix<T> &other);
-
+template<class U>
+inline void swap(Matrix<U>&, Matrix<U>&) noexcept;
 template<class CharT
     , class TraitsT
-    , class ValueType>
-std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &os
-    , const Matrix<ValueType> &matrix);
+    , class U>
+inline std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &stream
+    , const Matrix<U>&);
+
+template<class U>
+inline Matrix<U> operator +(const Matrix<U> &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{lhs} += rhs;}
+template<class U>
+inline Matrix<U> operator +(const Matrix<U> &lhs
+    , const typename Matrix<U>::ValueType &rhs)
+    {return Matrix{lhs} += rhs;}
+template<class U>
+inline Matrix<U> operator +(const typename Matrix<U>::ValueType &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{rhs.mRow, rhs.mColumn, lhs} += rhs;}
+template<class U>
+inline Matrix<U> operator -(const Matrix<U> &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{lhs} -= rhs;}
+template<class U>
+inline Matrix<U> operator -(const Matrix<U> &lhs
+    , const typename Matrix<U>::ValueType &rhs)
+    {return Matrix{lhs} -= rhs;}
+template<class U>
+inline Matrix<U> operator -(const typename Matrix<U>::ValueType &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{rhs.mRow, rhs.mColumn, lhs} -= rhs;}
+template<class U>
+inline Matrix<U> operator *(const Matrix<U> &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{lhs} *= rhs;}
+template<class U>
+inline Matrix<U> operator *(const Matrix<U> &lhs
+    , const typename Matrix<U>::ValueType &rhs)
+    {return Matrix{lhs} *= rhs;}
+template<class U>
+inline Matrix<U> operator *(const typename Matrix<U>::ValueType &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{rhs.mRow, rhs.mColumn, lhs} *= rhs;}
+template<class U>
+inline Matrix<U> operator /(const Matrix<U> &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{lhs} /= rhs;}
+template<class U>
+inline Matrix<U> operator /(const Matrix<U> &lhs
+    , const typename Matrix<U>::ValueType &rhs)
+    {return Matrix{lhs} /= rhs;}
+template<class U>
+inline Matrix<U> operator /(const typename Matrix<U>::ValueType &lhs
+    , const Matrix<U> &rhs)
+    {return Matrix{rhs.mRow, rhs.mColumn, lhs} /= rhs;}
+
+template<class U>
+inline Matrix<U> matmul(const Matrix<U> &lhs
+    , const Matrix<U> &rhs);
+
+template<class U>
+inline Matrix<U> exp(const Matrix<U> &matrix)
+    {return Matrix<U>{matrix.mRow, matrix.mColumn, std::exp(matrix.mValarray)};}
+
+template<class U>
+inline Matrix<U> log(const Matrix<U> &matrix)
+    {return Matrix<U>{matrix.mRow, matrix.mColumn, std::log(matrix.mValarray)};}
+
+template<class U>
+inline Matrix<U> log10(const Matrix<U> &matrix)
+    {return Matrix<U>{matrix.mRow, matrix.mColumn, std::log10(matrix.mValarray)};}
+
+template<class U>
+inline Matrix<U> pow(const Matrix<U> &base
+    , const Matrix<U> &exp)
+    {return Matrix<U>{base.mRow, base.mColumn, std::pow(base.mValarray, exp.mValarray)};}
+
+template<class U>
+inline Matrix<U> pow(const Matrix<U> &base
+    , const typename Matrix<U>::ValueType &exp)
+    {return Matrix<U>{base.mRow, base.mColumn, std::pow(base.mValarray, exp)};}
+
+template<class U>
+inline Matrix<U> pow(const typename Matrix<U>::ValueType &base
+    , const Matrix<U> &exp)
+    {return Matrix<U>{exp.mRow, exp.mColumn, std::pow(base, exp.mValarray)};}
+
+template<class U>
+inline Matrix<U> sqrt(const Matrix<U> &matrix)
+    {return Matrix<U>{matrix.mRow, matrix.mColumn, std::sqrt(matrix.mValarray)};}
 
 // implementations
 template<class T>
-Matrix<T>::Matrix()
+inline Matrix<T>::Matrix()
     : mRow{0ull}
     , mColumn{0ull}
-    , mData{nullptr}
+    , mValarray()
 {
 }
 
 template<class T>
-Matrix<T>::Matrix(std::size_t rowSize
-    , std::size_t columnSize)
+inline Matrix<T>::Matrix(std::size_t rowSize
+    , std::size_t columnSize
+    , const ValueType &value)
     : mRow{rowSize}
     , mColumn{columnSize}
-    , mData{mRow * mColumn != 0 ? new T[mRow * mColumn]{static_cast<T>(0)} : nullptr}
+    , mValarray(value, mRow * mColumn)
 {
 }
 
 template<class T>
-Matrix<T>::Matrix(const Matrix<T> &other)
-    : mRow{other.row()}
-    , mColumn{other.column()}
-    , mData{mRow * mColumn != 0 ? new T[mRow * mColumn] : nullptr}
+inline Matrix<T>::Matrix(std::size_t rowSize
+    , std::size_t columnSize
+    , const std::valarray<ValueType> &other)
+    : mRow{rowSize}
+    , mColumn{columnSize}
+    , mValarray(other)
 {
-    for(std::size_t r{0ull}; r < row(); r++)
-    {
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] = other[r][c];
-    }
 }
 
 template<class T>
-Matrix<T>::Matrix(Matrix<T> &&other)
-    : mRow{other.row()}
-    , mColumn{other.column()}
-    , mData{other.data()}
+inline Matrix<T>::Matrix(std::size_t rowSize
+    , std::size_t columnSize
+    , std::valarray<ValueType> &&other)
+    : mRow{rowSize}
+    , mColumn{columnSize}
+    , mValarray(other)
+{
+}
+
+template<class T>
+inline Matrix<T>::Matrix(const Matrix &other)
+    : mRow{other.mRow}
+    , mColumn{other.mColumn}
+    , mValarray(other.mValarray)
+{
+}
+
+template<class T>
+inline Matrix<T>::Matrix(Matrix &&other)
+    : mRow{other.mRow}
+    , mColumn{other.mColumn}
+    , mValarray(std::move(other.mValarray))
 {
     other.mRow = 0ull;
     other.mColumn = 0ull;
-    other.mData = nullptr;
 }
 
 template<class T>
-Matrix<T> &Matrix<T>::operator=(const Matrix<T> &other)
+inline Matrix<T> &Matrix<T>::operator=(const Matrix &other)
 {
     if(this != &other)
     {
-        delete []mData;
-        mRow = other.row();
-        mColumn = other.column();
-        mData = mRow * mColumn != 0 ? new T[mRow * mColumn] : nullptr;
-
-        for(std::size_t r{0ull}; r < mRow; r++)
-            for(std::size_t c{0ull}; c < mColumn; c++)
-                operator[](r)[c] = other[r][c];
+        mRow = other.mRow;
+        mColumn = other.mColumn;
+        mValarray = other.mValarray;
     }
 
     return *this;
 }
 
 template<class T>
-Matrix<T> &Matrix<T>::operator=(Matrix<T> &&other)
+inline Matrix<T> &Matrix<T>::operator=(Matrix &&other)
 {
     if(this != &other)
     {
-        delete []mData;
-        mRow = other.row();
-        mColumn = other.column();
-        mData = other.data();
+        mRow = other.mRow;
+        mColumn = other.mColumn;
+        mValarray = std::move(other.mValarray);
 
         other.mRow = 0ull;
         other.mColumn = 0ull;
-        other.mData = nullptr;
     }
 
     return *this;
 }
 
 template<class T>
-Matrix<T>::~Matrix()
+inline void Matrix<T>::swap(Matrix &other)
 {
-    delete []mData;
+    std::swap(mRow, other.mRow);
+    std::swap(mColumn, other.mColumn);
+    std::swap(mValarray, other.mValarray);
 }
 
 template<class T>
-void Matrix<T>::apply(const std::function<ValueType(ValueType)> &appliedFunction)
+inline void swap(Matrix<T> &lhs
+    , Matrix<T> &rhs) noexcept
 {
-    for(std::size_t r{0ull}; r < row(); r++)
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] = appliedFunction(operator[](r)[c]);
-}
-
-template<class T>
-Matrix<T> &Matrix<T>::operator +=(const Matrix<T> &rhs)
-{
-    if(row() != rhs.row()
-        || column() != rhs.column())
-        throw std::range_error("row or/and column sizes does not match.");
-
-    for(std::size_t r{0ull}; r < row(); r++)
-    {
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] += rhs[r][c];
-    }
-
-    return *this;
-}
-
-template<class T>
-Matrix<T> &Matrix<T>::operator +=(ValueType v)
-{
-    for(std::size_t r{0ull}; r < row(); r++)
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] += v;
-
-    return *this;
-}
-
-template<class T>
-Matrix<T> &Matrix<T>::operator -=(const Matrix<T> &rhs)
-{
-    if(row() != rhs.row()
-        || column() != rhs.column())
-        throw std::range_error("row or/and column sizes does not match.");
-
-    for(std::size_t r{0ull}; r < row(); r++)
-    {
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] -= rhs[r][c];
-    }
-
-    return *this;
-}
-
-template<class T>
-Matrix<T> &Matrix<T>::operator -=(ValueType v)
-{
-    for(std::size_t r{0ull}; r < row(); r++)
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] -= v;
-        
-    return *this;
-}
-
-template<class T>
-Matrix<T> &Matrix<T>::operator *=(ValueType v)
-{
-    for(std::size_t r{0ull}; r < row(); r++)
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] *= v;
-    
-    return *this;
-}
-
-template<class T>
-Matrix<T> &Matrix<T>::operator /=(ValueType v)
-{
-    for(std::size_t r{0ull}; r < row(); r++)
-        for(std::size_t c{0ull}; c < column(); c++)
-            operator[](r)[c] /= v;
-    
-    return *this;
-}
-
-template<class T>
-Matrix<T> operator +(const Matrix<T> &lhs
-    , const Matrix<T> &rhs)
-{
-    Matrix result{lhs};
-    return result += rhs;
-}
-
-template<class T>
-Matrix<T> operator +(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs)
-{
-    Matrix result{lhs};
-    return result += rhs;
-}
-
-template<class T>
-Matrix<T> operator +(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs)
-{
-    Matrix result{rhs};
-    return result += lhs;
-}
-
-template<class T>
-Matrix<T> operator -(const Matrix<T> &lhs
-    , const Matrix<T> &rhs)
-{
-    Matrix result{lhs};
-    return result -= rhs;
-}
-
-template<class T>
-Matrix<T> operator -(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs)
-{
-    Matrix result{lhs};
-    return result -= rhs;
-}
-
-template<class T>
-Matrix<T> operator -(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs)
-{
-    Matrix result{rhs};
-    for(std::size_t r{0ull}; r < result.row(); r++)
-        for(std::size_t c{0ull}; c < result.column(); c++)
-            result[r][c] = lhs - result[r][c];
-    return result;
-}
-
-template<class T>
-Matrix<T> operator *(const Matrix<T> &lhs
-    , const Matrix<T> &rhs)
-{
-    if(lhs.column() != rhs.row())
-        throw std::range_error("row or/and column sizes does not match.");
-    
-    Matrix<T> result{lhs.row(), rhs.column()};
-    for(std::size_t resultRow{0ull}; resultRow < result.row(); resultRow++)
-    {
-        for(std::size_t resultColumn{0ull}; resultColumn < result.column(); resultColumn++)
-        {
-            for(std::size_t operandIndex{0ull}; operandIndex < lhs.column(); operandIndex++)
-                result[resultRow][resultColumn] += lhs[resultRow][operandIndex] * rhs[operandIndex][resultColumn];
-        }
-    }
-
-    return result;
-}
-
-template<class T>
-Matrix<T> operator *(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs)
-{
-    Matrix<T> result{lhs};
-    return result *= rhs;
-}
-
-template<class T>
-Matrix<T> operator *(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs)
-{
-    Matrix<T> result{rhs};
-    return result *= lhs;
-}
-
-template<class T>
-Matrix<T> operator /(const Matrix<T> &lhs
-    , typename Matrix<T>::ValueType rhs)
-{
-    Matrix<T> result{lhs};
-    return result /= rhs;
-}
-
-template<class T>
-Matrix<T> operator /(typename Matrix<T>::ValueType lhs
-    , const Matrix<T> &rhs)
-{
-    Matrix<T> result{rhs};
-    for(std::size_t r{0ull}; r < result.row(); r++)
-        for(std::size_t c{0ull}; c < result.column(); c++)
-            result[r][c] = lhs / result[r][c];
-    
-    return result;
-}
-
-
-template<class T>
-Matrix<T> operator ~(const Matrix<T> &other)
-{
-    Matrix<T> result{other.column(), other.row()};
-
-    for(std::size_t resultRow{0ull}; resultRow < result.row(); resultRow++)
-    {
-        for(std::size_t resultColumn{0ull}; resultColumn < result.column(); resultColumn++)
-            result[resultRow][resultColumn] = other[resultColumn][resultRow];
-    }
-
-    return result;
+    std::swap(lhs.mRow, rhs.mRow);
+    std::swap(lhs.mColumn, rhs.mColumn);
+    std::swap(lhs.mValarray, rhs.mValarray);
 }
 
 template<class CharT
     , class TraitsT
-    , class ValueType>
-std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &os
-    , const Matrix<ValueType> &matrix)
+    , class T>
+inline std::basic_ostream<CharT, TraitsT> &operator <<(std::basic_ostream<CharT, TraitsT> &os
+    , const Matrix<T> &matrix)
 {
     os << '[';
-    for(std::size_t r{0ull}; r < matrix.row(); r++)
+    for(std::size_t r{0ull}; r < matrix.mRow; r++)
     {
         os << '[';
-        for(std::size_t c{0ull}; c < matrix.column(); c++)
-            os << matrix[r][c] << (c + 1ull != matrix.column() ? "," : "");
-        os << ']' << (r + 1ull != matrix.row() ? "\n" : "");
+        for(std::size_t c{0ull}; c < matrix.mColumn; c++)
+            os << matrix(r, c) << (c + 1ull != matrix.mColumn ? "," : "");
+        os << ']';
     }
     os << ']';
 
     return os;
+}
+
+template<class U>
+inline Matrix<U> matmul(const Matrix<U> &lhs
+    , const Matrix<U> &rhs)
+{
+    std::size_t row{lhs.mRow};
+    std::size_t column{rhs.mColumn};
+    Matrix<U> result{row, column};
+    for(std::size_t i{0ull}; i < row; i++)
+    {
+        for(std::size_t j{0ull}; j < column; j++)
+            result(i, j)
+                = (lhs.mValarray[std::slice(i * lhs.mColumn, lhs.mColumn, 1)]
+                    * rhs.mValarray[std::slice(j, rhs.mRow, rhs.mColumn)])
+                    .sum();
+    }
+
+    return result;
 }
 
 #endif

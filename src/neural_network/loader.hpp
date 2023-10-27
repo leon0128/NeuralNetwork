@@ -135,7 +135,7 @@ bool Loader::load(std::istream &stream
     matrix = Matrix<T>{row, column};
     for(std::size_t r{0ull}; r < row; r++)
         for(std::size_t c{0ull}; c < column; c++)
-            matrix[r][c] = read<T>(stream);
+            matrix(r, c) = read<T>(stream);
 
     return static_cast<bool>(stream);
 }
