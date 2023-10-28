@@ -17,6 +17,7 @@
 #include <iterator>
 
 #include "matrix/matrix.hpp"
+#include "concurrency.hpp"
 #include "random.hpp"
 #include "layer.hpp"
 #include "weight.hpp"
@@ -49,6 +50,7 @@ public:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
+        , std::size_t concurrency = 8ull
         , std::size_t earlyStoppingLimit = 5ull);
 
     bool predict(const Matrix<T> &input
@@ -65,6 +67,7 @@ private:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
+        , std::size_t concurrency
         , std::size_t earlyStoppingLimit) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
@@ -76,6 +79,7 @@ private:
         , const std::vector<Matrix<T>> &trainingOutput
         , const std::vector<Matrix<T>> &validationInput
         , const std::vector<Matrix<T>> &validationOutput
+        , std::size_t concurrency
         , std::size_t earlyStoppingLimit);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
@@ -166,6 +170,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
+    , std::size_t concurrency
     , std::size_t earlyStoppingLimit)
 {
     if(!checkValidity(epochSize
@@ -178,6 +183,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , validationOutput
         , testInput
         , testOutput
+        , concurrency
         , earlyStoppingLimit))
         return false;
 
@@ -192,6 +198,7 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , trainingOutput
         , validationInput
         , validationOutput
+        , concurrency
         , earlyStoppingLimit))
         return false;
 
@@ -225,6 +232,7 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
+    , std::size_t concurrency
     , std::size_t earlyStoppingLimit) const
 {
     auto &&checkMatrixValidity{[](auto &&vec, auto &&columnSize)
@@ -261,6 +269,9 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
         || !checkMatrixValidity(testInput, mLayers.front()->input().column())
         || !checkMatrixValidity(testOutput, mLayers.back()->output().column()))
         return trainingError("data's elements does not match layer's io.");
+
+    if(concurrency == 0ull)
+        return trainingError("concurrency size is invalid.");
 
     if(earlyStoppingLimit == 0ull)
         return trainingError("condition of early stopping is invalid.");
@@ -332,6 +343,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     , const std::vector<Matrix<T>> &trainingOutput
     , const std::vector<Matrix<T>> &validationInput
     , const std::vector<Matrix<T>> &validationOutput
+    , std::size_t concurrency
     , std::size_t earlyStoppingLimit)
 {
     T minError{std::numeric_limits<T>::max()};
