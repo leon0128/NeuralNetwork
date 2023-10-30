@@ -106,8 +106,7 @@ private:
         , T &minError
         , std::size_t earlyStoppingLimit
         , std::size_t &stoppingCount
-        , std::list<std::shared_ptr<Weight<T>>> &minWeights
-        , std::list<std::shared_ptr<Bias<T>>> &minBiases);
+        , const std::string &tempFilename);
 
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
@@ -348,10 +347,9 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
 {
     T minError{std::numeric_limits<T>::max()};
     std::size_t stoppingCount{0ull};
+    std::string tempFilename{std::filesystem::temp_directory_path().string() + std::to_string(RANDOM())};
     std::list<std::shared_ptr<Weight<T>>> weightGradients;
     std::list<std::shared_ptr<Bias<T>>> biasGradients;
-    std::list<std::shared_ptr<Weight<T>>> minWeights;
-    std::list<std::shared_ptr<Bias<T>>> minBiases;
     std::list<Matrix<T>> weightAdamMs;
     std::list<Matrix<T>> biasAdamMs;
     std::list<Matrix<T>> weightAdamVs;
@@ -359,14 +357,12 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     for(auto &&weight : mWeights)
     {
         weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
-        minWeights.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
         weightAdamMs.emplace_back(weight->data().row(), weight->data().column());
         weightAdamVs.emplace_back(weight->data().row(), weight->data().column());
     }
     for(auto &&bias : mBiases)
     {
         biasGradients.emplace_back(new Bias<T>{bias->data().column()});
-        minBiases.emplace_back(new Bias<T>{bias->data().column()});
         biasAdamMs.emplace_back(bias->data().row(), bias->data().column());
         biasAdamVs.emplace_back(bias->data().row(), bias->data().column());
     }
@@ -624,8 +620,7 @@ bool NeuralNetwork<T>::shouldStopEarly(T error
     , T &minError
     , std::size_t earlyStoppingLimit
     , std::size_t &stoppingCount
-    , std::list<std::shared_ptr<Weight<T>>> &minWeights
-    , std::list<std::shared_ptr<Bias<T>>> &minBiases)
+    , const std::string &tempFilename)
 {
     if(error < minError)
     {
