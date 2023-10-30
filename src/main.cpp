@@ -74,6 +74,7 @@ int main(int argc, char **argv)
         , validationOutput
         , testInput
         , testOutput
+        , 8ull
         , 10'000);
 
     Matrix<double> result;

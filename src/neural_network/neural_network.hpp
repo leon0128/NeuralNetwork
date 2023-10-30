@@ -149,9 +149,9 @@ void NeuralNetwork<T>::addLayer(Layer<T> *layer)
     if(!mLayers.empty())
     {
         auto &&lastLayer{mLayers.back()};
-        Weight<T> *weight{new Weight<T>{lastLayer->output().column()
-            , layer->input().column()}};
-        Bias<T> *bias{new Bias<T>{layer->input().column()}};
+        Weight<T> *weight{new Weight<T>{lastLayer->data().column()
+            , layer->data().column()}};
+        Bias<T> *bias{new Bias<T>{layer->data().column()}};
         mWeights.push_back(weight);
         mBiases.push_back(bias);
     }
@@ -217,7 +217,7 @@ bool NeuralNetwork<T>::predict(const Matrix<T> &input
     if(!propagate(input, false))
         return false;
     
-    output = mLayers.back()->output();
+    output = mLayers.back()->data();
     return true;
 }
 
@@ -262,12 +262,12 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
     if(mLayers.empty())
         return trainingError("multi-layer perceptron has no layers.");
 
-    if(!checkMatrixValidity(trainingInput, mLayers.front()->input().column())
-        || !checkMatrixValidity(trainingOutput, mLayers.back()->output().column())
-        || !checkMatrixValidity(validationInput, mLayers.front()->input().column())
-        || !checkMatrixValidity(validationOutput, mLayers.back()->output().column())
-        || !checkMatrixValidity(testInput, mLayers.front()->input().column())
-        || !checkMatrixValidity(testOutput, mLayers.back()->output().column()))
+    if(!checkMatrixValidity(trainingInput, mLayers.front()->data().column())
+        || !checkMatrixValidity(trainingOutput, mLayers.back()->data().column())
+        || !checkMatrixValidity(validationInput, mLayers.front()->data().column())
+        || !checkMatrixValidity(validationOutput, mLayers.back()->data().column())
+        || !checkMatrixValidity(testInput, mLayers.front()->data().column())
+        || !checkMatrixValidity(testOutput, mLayers.back()->data().column()))
         return trainingError("data's elements does not match layer's io.");
 
     if(concurrency == 0ull)
@@ -319,7 +319,7 @@ bool NeuralNetwork<T>::randomizeParameter()
             case(ActivationTag::SOFTMAX):
             case(ActivationTag::RELU):
             {
-                std::normal_distribution<T> dist{static_cast<T>(0), std::sqrt(static_cast<T>(2) / (*std::prev(layerIter))->output().column())};
+                std::normal_distribution<T> dist{static_cast<T>(0), std::sqrt(static_cast<T>(2) / (*std::prev(layerIter))->data().column())};
                 for(std::size_t r{0ull}; r < (*weightIter)->data().row(); r++)
                     for(std::size_t c{0ull}; c < (*weightIter)->data().column(); c++)
                         (*weightIter)->data()(r, c) = dist(RANDOM.engine());
@@ -478,7 +478,7 @@ bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput
             , weightIter++
             , biasIter++)
     {
-        if(!(*layerIter)->activate((*std::prev(layerIter))->output()
+        if(!(*layerIter)->activate((*std::prev(layerIter))->data()
             , (*weightIter)->data()
             , (*biasIter)->data()
             , isTraining))
@@ -502,8 +502,8 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
     auto &&biasGradientIter{biasGradients.rbegin()};
 
     // output layer
-    Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->output()))};
-    (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->output(), error);
+    Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->data()))};
+    (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->data(), error);
     (*biasGradientIter)->data() += error;
 
     // others
@@ -518,7 +518,7 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
             , biasGradientIter++)
     {
         error = (*layerIter)->error(matmul(error, ~(*weightIter)->data()));
-        (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->output(), error);
+        (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->data(), error);
         (*biasGradientIter)->data() += error;
     }
 
@@ -613,7 +613,7 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
             , outputIter++)
     {
         propagate(*inputIter, false);
-        error += errorFunction((*outputIter), mLayers.back()->output());
+        error += errorFunction((*outputIter), mLayers.back()->data());
     }
 
     return error;
