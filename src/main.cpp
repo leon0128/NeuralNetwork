@@ -64,8 +64,8 @@ int main(int argc, char **argv)
     testInput = trainingInput;
     testOutput = trainingOutput;
  
-    mlp.train(1'000'000ull
-        , 4ull
+    mlp.train(1'0ull
+        , 64ull
         , ErrorTag::CATEGORICAL_CROSS_ENTROPY
         , OptimizationTag::ADAM
         , trainingInput
@@ -75,7 +75,7 @@ int main(int argc, char **argv)
         , testInput
         , testOutput
         , 8ull
-        , 10'000);
+        , 100);
 
     Matrix<double> result;
     mlp.predict(inputA, result);

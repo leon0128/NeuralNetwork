@@ -16,6 +16,8 @@
 #include <fstream>
 #include <iterator>
 
+#include "saver.hpp"
+#include "loader.hpp"
 #include "matrix/matrix.hpp"
 #include "concurrency.hpp"
 #include "random.hpp"
@@ -27,6 +29,17 @@
 
 namespace NEURAL_NETWORK
 {
+
+class Saver;
+class Loader;
+template<class T>
+class Layer;
+template<class T>
+class ParameterBase;
+template<class T>
+class Weight;
+template<class T>
+class Bias;
 
 template<class T>
 class NeuralNetwork
@@ -106,14 +119,17 @@ private:
         , T &minError
         , std::size_t earlyStoppingLimit
         , std::size_t &stoppingCount
-        , const std::string &tempFilename);
+        , const std::filesystem::path &tempFilename);
+    
+    bool saveParameter(const std::filesystem::path &filepath) const;
+    bool loadParameter(const std::filesystem::path &filepath);
 
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
     bool openingFileError(const std::filesystem::path &filepath) const;
-    bool writingError(const std::string &what
+    bool savingError(const std::string &what
         , const std::filesystem::path &filepath) const;
-    bool readingError(const std::string &what
+    bool loadingError(const std::string &what
         , const std::filesystem::path &filepath) const;
 
     std::list<Layer<T>*> mLayers;
@@ -347,7 +363,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
 {
     T minError{std::numeric_limits<T>::max()};
     std::size_t stoppingCount{0ull};
-    std::string tempFilename{std::filesystem::temp_directory_path().string() + std::to_string(RANDOM())};
+    std::filesystem::path tempFilepath{std::filesystem::temp_directory_path() / std::to_string(RANDOM())};
     std::list<std::shared_ptr<Weight<T>>> weightGradients;
     std::list<std::shared_ptr<Bias<T>>> biasGradients;
     std::list<Matrix<T>> weightAdamMs;
@@ -373,7 +389,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             !trainingIndices.empty();
             trainingIndices.pop_front())
         {
-            std::cout << "remaining data of epoch " << epoch + 1ull << ": " << trainingIndices.size() << std::string(20, ' ') << '\r' << std::flush;
+            std::cout << "remaining data of epoch " << epoch + 1ull << ": " << trainingIndices.size() << std::string(10, ' ') << '\r' << std::flush;
 
             std::size_t trainingIndex{trainingIndices.front()};
             if(!propagate(trainingInput[trainingIndex], true))
@@ -410,14 +426,13 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
 
         auto &&error{calculateError(validationInput, validationOutput, errorTag)};
         if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
-            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::endl;
+            std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::string(10, ' ') << std::endl;
 
         if(shouldStopEarly(error
             , minError
             , earlyStoppingLimit
             , stoppingCount
-            , minWeights
-            , minBiases))
+            , tempFilepath))
         {
             std::cout << "early stopping has been activated."
                 << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
@@ -425,16 +440,8 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
         }
     }
 
-    for(auto &&weight : mWeights)
-        delete weight;
-    for(auto &&bias : mBiases)
-        delete bias;
-    mWeights.clear();
-    mBiases.clear();
-    for(auto &&minWeight : minWeights)
-        mWeights.push_back(new Weight{std::move(*minWeight)});
-    for(auto &&minBias : minBiases)
-        mBiases.push_back(new Bias{std::move(*minBias)});
+    if(!loadParameter(tempFilepath))
+        return false;
 
     return true;
 }
@@ -620,23 +627,52 @@ bool NeuralNetwork<T>::shouldStopEarly(T error
     , T &minError
     , std::size_t earlyStoppingLimit
     , std::size_t &stoppingCount
-    , const std::string &tempFilename)
+    , const std::filesystem::path &tempFilepath)
 {
     if(error < minError)
     {
         minError = error;
         stoppingCount = 0ull;
-        minWeights.clear();
-        minBiases.clear();
-        for(auto &&weight : mWeights)
-            minWeights.emplace_back(new Weight{*weight});
-        for(auto &&bias : mBiases)
-            minBiases.emplace_back(new Bias{*bias});
+        
+        if(!saveParameter(tempFilepath))
+            return false;
     }
     else
         stoppingCount++;
 
     return stoppingCount == earlyStoppingLimit;
+}
+
+template<class T>
+bool NeuralNetwork<T>::saveParameter(const std::filesystem::path &filepath) const
+{
+    std::ofstream stream{filepath, std::ios_base::out | std::ios_base::binary};
+    if(!stream.is_open())
+        return openingFileError(filepath);
+    for(auto &&weight : mWeights)
+        if(!Saver::save(stream, *weight))
+            return savingError("failed to save weight to file.", filepath);
+    for(auto &&bias : mBiases)
+        if(!Saver::save(stream, *bias))
+            return savingError("failed to save bias to file.", filepath);
+
+    return true;
+}
+
+template<class T>
+bool NeuralNetwork<T>::loadParameter(const std::filesystem::path &filepath)
+{
+    std::ifstream stream{filepath, std::ios_base::in | std::ios_base::binary};
+    if(!stream.is_open())
+        return openingFileError(filepath);
+    for(auto &&weight : mWeights)
+        if(!Loader::load(stream, *weight))
+            return loadingError("failed to load weight from file.", filepath);
+    for(auto &&bias : mBiases)
+        if(!Loader::load(stream, *bias))
+            return loadingError("failed to load bias from file.", filepath);
+
+    return true;
 }
 
 template<class T>
@@ -667,20 +703,20 @@ bool NeuralNetwork<T>::openingFileError(const std::filesystem::path &filepath) c
 }
 
 template<class T>
-bool NeuralNetwork<T>::writingError(const std::string &what
+bool NeuralNetwork<T>::savingError(const std::string &what
     , const std::filesystem::path &filepath) const
 {
-    std::cerr << "NeuralNetwork::writingError():\n"
+    std::cerr << "NeuralNetwork::savingError():\n"
         "    what: " << what
         << "\n    file: " << filepath.string() << std::endl;
     return false;
 }
 
 template<class T>
-bool NeuralNetwork<T>::readingError(const std::string &what
+bool NeuralNetwork<T>::loadingError(const std::string &what
     , const std::filesystem::path &filepath) const
 {
-    std::cerr << "NeuralNetwork::readingError():\n"
+    std::cerr << "NeuralNetwork::loadingError():\n"
         "    what: " << what
         << "\n    file: " << filepath.string() << std::endl;
     return false;
