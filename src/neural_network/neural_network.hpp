@@ -108,10 +108,7 @@ private:
     bool updateParameter(OptimizationTag optimizationTag
         , std::list<std::shared_ptr<Weight<T>>> &weightGradients
         , std::list<std::shared_ptr<Bias<T>>> &biasGradients
-        , std::list<Matrix<T>> &weightAdamMs
-        , std::list<Matrix<T>> &biasAdamMs
-        , std::list<Matrix<T>> &weightAdamVs
-        , std::list<Matrix<T>> &biasAdamVs);
+        , const std::filesystem::path &adamFilepath);
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
         , ErrorTag errorTag);
@@ -119,10 +116,20 @@ private:
         , T &minError
         , std::size_t earlyStoppingLimit
         , std::size_t &stoppingCount
-        , const std::filesystem::path &tempFilename);
+        , const std::filesystem::path &minParameterFilepath);
     
     bool saveParameter(const std::filesystem::path &filepath) const;
     bool loadParameter(const std::filesystem::path &filepath);
+    bool saveAdam(const std::filesystem::path &filepath
+        , const std::list<Matrix<T>> &weightMs
+        , const std::list<Matrix<T>> &weightVs
+        , const std::list<Matrix<T>> &biasMs
+        , const std::list<Matrix<T>> &biasVs) const;
+    bool loadAdam(const std::filesystem::path &filepath
+        , std::list<Matrix<T>> &weightMs
+        , std::list<Matrix<T>> &weightVs
+        , std::list<Matrix<T>> &biasMs
+        , std::list<Matrix<T>> &biasVs) const;
 
     bool trainingError(const std::string &what) const;
     bool activationError(const std::string &what) const;
@@ -363,25 +370,15 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
 {
     T minError{std::numeric_limits<T>::max()};
     std::size_t stoppingCount{0ull};
-    std::filesystem::path tempFilepath{std::filesystem::temp_directory_path() / std::to_string(RANDOM())};
+    std::filesystem::path minParameterFilepath{std::filesystem::temp_directory_path() / std::filesystem::path{"neural_network_"}.concat(std::to_string(RANDOM()))};
+    std::filesystem::path adamFilepath{std::filesystem::temp_directory_path() / std::filesystem::path{"neural_network_"}.concat(std::to_string(RANDOM()))};
     std::list<std::shared_ptr<Weight<T>>> weightGradients;
     std::list<std::shared_ptr<Bias<T>>> biasGradients;
-    std::list<Matrix<T>> weightAdamMs;
-    std::list<Matrix<T>> biasAdamMs;
-    std::list<Matrix<T>> weightAdamVs;
-    std::list<Matrix<T>> biasAdamVs;
+
     for(auto &&weight : mWeights)
-    {
         weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
-        weightAdamMs.emplace_back(weight->data().row(), weight->data().column());
-        weightAdamVs.emplace_back(weight->data().row(), weight->data().column());
-    }
     for(auto &&bias : mBiases)
-    {
         biasGradients.emplace_back(new Bias<T>{bias->data().column()});
-        biasAdamMs.emplace_back(bias->data().row(), bias->data().column());
-        biasAdamVs.emplace_back(bias->data().row(), bias->data().column());
-    }
 
     for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
     {
@@ -392,6 +389,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             std::cout << "remaining data of epoch " << epoch + 1ull << ": " << trainingIndices.size() << std::string(10, ' ') << '\r' << std::flush;
 
             std::size_t trainingIndex{trainingIndices.front()};
+
             if(!propagate(trainingInput[trainingIndex], true))
                 return false;
             if(!backpropagate(trainingOutput[trainingIndex]
@@ -410,10 +408,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             if(!updateParameter(optimizationTag
                 , weightGradients
                 , biasGradients
-                , weightAdamMs
-                , biasAdamMs
-                , weightAdamVs
-                , biasAdamVs))
+                , adamFilepath))
                 return false;
             
             for(auto &&layer : mLayers)
@@ -432,7 +427,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             , minError
             , earlyStoppingLimit
             , stoppingCount
-            , tempFilepath))
+            , minParameterFilepath))
         {
             std::cout << "early stopping has been activated."
                 << "\n    reached epoch: " << epoch + 1ull << "/" << epochSize << std::endl;
@@ -440,7 +435,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
         }
     }
 
-    if(!loadParameter(tempFilepath))
+    if(!loadParameter(minParameterFilepath))
         return false;
 
     return true;
@@ -547,42 +542,63 @@ template<class T>
 bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
     , std::list<std::shared_ptr<Weight<T>>> &weightGradients
     , std::list<std::shared_ptr<Bias<T>>> &biasGradients
-    , std::list<Matrix<T>> &weightAdamMs
-    , std::list<Matrix<T>> &biasAdamMs
-    , std::list<Matrix<T>> &weightAdamVs
-    , std::list<Matrix<T>> &biasAdamVs)
+    , const std::filesystem::path &adamFilepath)
 {
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
     auto &&weightGradientIter{weightGradients.begin()};
     auto &&biasGradientIter{biasGradients.begin()};
-    auto &&weightAdamMIter{weightAdamMs.begin()};
-    auto &&weightAdamVIter{weightAdamVs.begin()};
-    auto &&biasAdamMIter{biasAdamMs.begin()};
-    auto &&biasAdamVIter{biasAdamVs.begin()};
 
-    for(;
-        weightIter != mWeights.end();
-        weightIter++
-            , biasIter++
-            , weightGradientIter++
-            , biasGradientIter++
-            , weightAdamMIter++
-            , weightAdamVIter++
-            , biasAdamMIter++
-            , biasAdamVIter++)
+    switch(optimizationTag)
     {
-        switch(optimizationTag)
+        case(OptimizationTag::NONE):
         {
-            case(OptimizationTag::NONE):
+            for(;
+                weightIter != mWeights.end();
+                weightIter++
+                    , biasIter++
+                    , weightGradientIter++
+                    , biasGradientIter++)
+            {
                 (*weightIter)->data()
                     = FUNCTION::optimizationNone((*weightIter)->data()
                         , (*weightGradientIter)->data());
                 (*biasIter)->data()
                     = FUNCTION::optimizationNone((*biasIter)->data()
                         , (*biasGradientIter)->data());
-                break;
-            case(OptimizationTag::ADAM):
+            }
+            break;
+        }
+        case(OptimizationTag::ADAM):
+        {
+            std::list<Matrix<T>> weightAdamMs(mWeights.size());
+            std::list<Matrix<T>> weightAdamVs(mWeights.size());
+            std::list<Matrix<T>> biasAdamMs(mBiases.size());
+            std::list<Matrix<T>> biasAdamVs(mBiases.size());
+
+            if(!loadAdam(adamFilepath
+                , weightAdamMs
+                , weightAdamVs
+                , biasAdamMs
+                , biasAdamVs))
+                return false;
+
+            auto &&weightAdamMIter{weightAdamMs.begin()};
+            auto &&weightAdamVIter{weightAdamVs.begin()};
+            auto &&biasAdamMIter{biasAdamMs.begin()};
+            auto &&biasAdamVIter{biasAdamVs.begin()};
+
+            for(;
+                weightIter != mWeights.end();
+                weightIter++
+                    , biasIter++
+                    , weightGradientIter++
+                    , biasGradientIter++
+                    , weightAdamMIter++
+                    , weightAdamVIter++
+                    , biasAdamMIter++
+                    , biasAdamVIter++)
+            {
                 (*weightIter)->data()
                     = FUNCTION::adam((*weightIter)->data()
                         , (*weightGradientIter)->data()
@@ -593,7 +609,14 @@ bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
                         , (*biasGradientIter)->data()
                         , *biasAdamMIter
                         , *biasAdamVIter);
-                break;
+            }
+
+            if(!saveAdam(adamFilepath
+                , weightAdamMs
+                , weightAdamVs
+                , biasAdamMs
+                , biasAdamVs))
+                return false;
         }
     }
 
@@ -627,14 +650,14 @@ bool NeuralNetwork<T>::shouldStopEarly(T error
     , T &minError
     , std::size_t earlyStoppingLimit
     , std::size_t &stoppingCount
-    , const std::filesystem::path &tempFilepath)
+    , const std::filesystem::path &minParameterFilepath)
 {
     if(error < minError)
     {
         minError = error;
         stoppingCount = 0ull;
         
-        if(!saveParameter(tempFilepath))
+        if(!saveParameter(minParameterFilepath))
             return false;
     }
     else
@@ -671,6 +694,83 @@ bool NeuralNetwork<T>::loadParameter(const std::filesystem::path &filepath)
     for(auto &&bias : mBiases)
         if(!Loader::load(stream, *bias))
             return loadingError("failed to load bias from file.", filepath);
+
+    return true;
+}
+
+template<class T>
+bool NeuralNetwork<T>::saveAdam(const std::filesystem::path &filepath
+    , const std::list<Matrix<T>> &weightMs
+    , const std::list<Matrix<T>> &weightVs
+    , const std::list<Matrix<T>> &biasMs
+    , const std::list<Matrix<T>> &biasVs) const
+{
+    std::ofstream stream{filepath, std::ios_base::out | std::ios_base::binary};
+    if(!stream.is_open())
+        return openingFileError(filepath);
+    
+    for(auto &&m : weightMs)
+        if(!Saver::save(stream, m))
+            return savingError("failed to save adam parameter to file.", filepath);
+    for(auto &&v : weightVs)
+        if(!Saver::save(stream, v))
+            return savingError("failed to save adam parameter to file.", filepath);
+    for(auto &&m : biasMs)
+        if(!Saver::save(stream, m))
+            return savingError("failed to save adam parameter to file.", filepath);
+    for(auto &&v : biasVs)
+        if(!Saver::save(stream, v))
+            return savingError("failed to save adam parameter to file.", filepath);
+
+    return true;
+}
+
+template<class T>
+bool NeuralNetwork<T>::loadAdam(const std::filesystem::path &filepath
+    , std::list<Matrix<T>> &weightMs
+    , std::list<Matrix<T>> &weightVs
+    , std::list<Matrix<T>> &biasMs
+    , std::list<Matrix<T>> &biasVs) const
+{
+    std::ifstream stream{filepath, std::ios_base::in | std::ios_base::binary};
+    if(!stream.is_open())
+    {
+        auto &&weightIter{mWeights.begin()};
+        auto &&biasIter{mBiases.begin()};
+        auto &&weightMsIter{weightMs.begin()};
+        auto &&weightVsIter{weightVs.begin()};
+        auto &&biasMsIter{biasMs.begin()};
+        auto &&biasVsIter{biasVs.begin()};
+        for(;
+            weightIter != mWeights.end();
+            weightIter++
+                , biasIter++
+                , weightMsIter++
+                , weightVsIter++
+                , biasMsIter++
+                , biasVsIter++)
+        {
+            *weightMsIter = Matrix<T>{(*weightIter)->data().row(), (*weightIter)->data().column()};
+            *weightVsIter = Matrix<T>{(*weightIter)->data().row(), (*weightIter)->data().column()};
+            *biasMsIter = Matrix<T>{(*biasIter)->data().row(), (*biasIter)->data().column()};
+            *biasVsIter = Matrix<T>{(*biasIter)->data().row(), (*biasIter)->data().column()};
+        }
+    }
+    else
+    {
+        for(auto &&m : weightMs)
+            if(!Loader::load(stream, m))
+                return loadingError("failed to load adam parameter from file.", filepath);
+        for(auto &&v : weightVs)
+            if(!Loader::load(stream, v))
+                return loadingError("failed to load adam parameter from file.", filepath);
+        for(auto &&m : biasMs)
+            if(!Loader::load(stream, m))
+                return loadingError("failed to load adam parameter from file.", filepath);
+        for(auto &&v : biasVs)
+            if(!Loader::load(stream, v))
+                return loadingError("failed to load adam parameter from file.", filepath);
+    }
 
     return true;
 }
