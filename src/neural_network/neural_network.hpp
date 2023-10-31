@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <mutex>
 
 #include "saver.hpp"
 #include "loader.hpp"
@@ -101,7 +102,9 @@ private:
     bool backpropagate(const Matrix<T> &trainingOutput
         , ErrorTag errorTag
         , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-        , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
+        , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+        , std::mutex &weightGradientsMutex
+        , std::mutex &biasGradientsMutex);
     bool calculateAverage(std::size_t batchSize
         , std::list<std::shared_ptr<Weight<T>>> &weightGradients
         , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
@@ -490,7 +493,9 @@ template<class T>
 bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
     , ErrorTag errorTag
     , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-    , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
+    , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+    , std::mutex &weightGradientsMutex
+    , std::mutex &biasGradientsMutex)
 {
     // reverse iterators
     auto &&layerIter{mLayers.rbegin()};
@@ -498,6 +503,9 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
     auto &&biasIter{mBiases.rbegin()};
     auto &&weightGradientIter{weightGradients.rbegin()};
     auto &&biasGradientIter{biasGradients.rbegin()};
+
+    std::unique_lock weightLock{weightGradientsMutex};
+    std::unique_lock biasLock{biasGradientsMutex};
 
     // output layer
     Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->data()))};
