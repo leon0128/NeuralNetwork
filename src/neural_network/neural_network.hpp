@@ -97,20 +97,22 @@ private:
         , std::size_t earlyStoppingLimit);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
-    bool propagate(const Matrix<T> &trainingInput
+    bool propagate(std::list<Layer<T>*> &layers
+        , const Matrix<T> &trainingInput
         , bool isTraining);
-    bool backpropagate(const Matrix<T> &trainingOutput
+    bool backpropagate(const std::list<Layer<T>*> &layers
+        , const Matrix<T> &trainingOutput
         , ErrorTag errorTag
-        , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-        , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+        , std::list<Weight<T>*> &weightGradients
+        , std::list<Bias<T>*> &biasGradients
         , std::mutex &weightGradientsMutex
         , std::mutex &biasGradientsMutex);
     bool calculateAverage(std::size_t batchSize
-        , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-        , std::list<std::shared_ptr<Bias<T>>> &biasGradients);
+        , std::list<Weight<T>*> &weightGradients
+        , std::list<Bias<T>*> &biasGradients);
     bool updateParameter(OptimizationTag optimizationTag
-        , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-        , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+        , std::list<Weight<T>*> &weightGradients
+        , std::list<Bias<T>*> &biasGradients
         , const std::filesystem::path &adamFilepath);
     T calculateError(const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
@@ -239,7 +241,7 @@ bool NeuralNetwork<T>::predict(const Matrix<T> &input
     if(!checkValidity(input))
         return false;
 
-    if(!propagate(input, false))
+    if(!propagate(mLayers, input, false))
         return false;
     
     output = mLayers.back()->data();
@@ -375,13 +377,42 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     std::size_t stoppingCount{0ull};
     std::filesystem::path minParameterFilepath{std::filesystem::temp_directory_path() / std::filesystem::path{"neural_network_"}.concat(std::to_string(RANDOM()))};
     std::filesystem::path adamFilepath{std::filesystem::temp_directory_path() / std::filesystem::path{"neural_network_"}.concat(std::to_string(RANDOM()))};
-    std::list<std::shared_ptr<Weight<T>>> weightGradients;
-    std::list<std::shared_ptr<Bias<T>>> biasGradients;
+    std::list<Weight<T>*> weightGradients;
+    std::list<Bias<T>*> biasGradients;
+    std::vector<std::list<Layer<T>*>> concurrencyLayers(concurrency, std::list<Layer<T>*>(mLayers.size()));
+    std::mutex weightGradientsMutex;
+    std::mutex biasGradientsMutex;
 
     for(auto &&weight : mWeights)
         weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
     for(auto &&bias : mBiases)
         biasGradients.emplace_back(new Bias<T>{bias->data().column()});
+    for(auto &&layers : concurrencyLayers)
+        for(auto &&layer : layers)
+            layer = new Layer<T>{0ull, ActivationTag::NONE};
+
+    auto &&destruct{[&]()->void
+        {
+            for(auto &&weight : weightGradients)
+                delete weight;
+            for(auto &&bias : biasGradients)
+                delete bias;
+            for(auto &&layers : concurrencyLayers)
+                for(auto &&layer : layers)
+                    delete layer;
+        }};
+    auto &&copy{[&]()->void
+        {
+            for(auto &&conLayers : concurrencyLayers)
+                for(auto &&iter{mLayers.begin()}, conIter{conLayers.begin()};
+                    iter != mLayers.end();
+                    iter++,conIter++)
+                    **conIter = **iter;
+        }};
+    auto &&propagateAndBackpropagate{[&](std::size_t idx)->bool
+        {
+            return true;
+        }};
 
     for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
     {
@@ -393,13 +424,16 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
 
             std::size_t trainingIndex{trainingIndices.front()};
 
-            if(!propagate(trainingInput[trainingIndex], true))
-                return false;
-            if(!backpropagate(trainingOutput[trainingIndex]
+            if(!propagate(mLayers, trainingInput[trainingIndex], true))
+                return destruct(), false;
+            if(!backpropagate(mLayers
+                , trainingOutput[trainingIndex]
                 , errorTag
                 , weightGradients
-                , biasGradients))
-                return false;
+                , biasGradients
+                , weightGradientsMutex
+                , biasGradientsMutex))
+                return destruct(), false;
             
             if((trainingIndices.size() - 1ull) % batchSize != 0ull)
                 continue;
@@ -407,12 +441,12 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
             if(!calculateAverage(batchSize
                 , weightGradients
                 , biasGradients))
-                return false;
+                return destruct(), false;
             if(!updateParameter(optimizationTag
                 , weightGradients
                 , biasGradients
                 , adamFilepath))
-                return false;
+                return destruct(), false;
             
             for(auto &&layer : mLayers)
                 layer->updateDropout();
@@ -439,9 +473,9 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     }
 
     if(!loadParameter(minParameterFilepath))
-        return false;
+        return destruct(), false;
 
-    return true;
+    return destruct(), true;
 }
 
 template<class T>
@@ -463,10 +497,11 @@ std::deque<std::size_t> NeuralNetwork<T>::createTrainingIndices(std::size_t trai
 }
 
 template<class T>
-bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput
+bool NeuralNetwork<T>::propagate(std::list<Layer<T>*> &layers
+    , const Matrix<T> &trainingInput
     , bool isTraining)
 {
-    auto &&layerIter{mLayers.begin()};
+    auto &&layerIter{layers.begin()};
     auto &&weightIter{mWeights.begin()};
     auto &&biasIter{mBiases.begin()};
 
@@ -474,7 +509,7 @@ bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput
         return false;
 
     for(layerIter++;
-        layerIter != mLayers.end();
+        layerIter != layers.end();
         layerIter++
             , weightIter++
             , biasIter++)
@@ -490,33 +525,39 @@ bool NeuralNetwork<T>::propagate(const Matrix<T> &trainingInput
 }
 
 template<class T>
-bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
+bool NeuralNetwork<T>::backpropagate(const std::list<Layer<T>*> &layers
+    , const Matrix<T> &trainingOutput
     , ErrorTag errorTag
-    , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-    , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+    , std::list<Weight<T>*> &weightGradients
+    , std::list<Bias<T>*> &biasGradients
     , std::mutex &weightGradientsMutex
     , std::mutex &biasGradientsMutex)
 {
     // reverse iterators
-    auto &&layerIter{mLayers.rbegin()};
+    auto &&layerIter{layers.rbegin()};
     auto &&weightIter{mWeights.rbegin()};
     auto &&biasIter{mBiases.rbegin()};
     auto &&weightGradientIter{weightGradients.rbegin()};
     auto &&biasGradientIter{biasGradients.rbegin()};
 
-    std::unique_lock weightLock{weightGradientsMutex};
-    std::unique_lock biasLock{biasGradientsMutex};
+    std::unique_lock weightLock{weightGradientsMutex, std::defer_lock};
+    std::unique_lock biasLock{biasGradientsMutex, std::defer_lock};
 
     // output layer
     Matrix<T> error{(*layerIter)->error(FUNCTION::derivativeErrorFunction<T>(errorTag)(trainingOutput, (*layerIter)->data()))};
-    (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->data(), error);
+    Matrix<T> weightError{matmul(~(*std::next(layerIter))->data(), error)};
+    weightLock.lock();
+    (*weightGradientIter)->data() += weightError;
+    weightLock.unlock();
+    biasLock.lock();
     (*biasGradientIter)->data() += error;
+    biasLock.unlock();
 
     // others
     for(layerIter++
             , weightGradientIter++
             , biasGradientIter++;
-        std::next(layerIter) != mLayers.rend();
+        std::next(layerIter) != layers.rend();
         layerIter++
             , weightIter++
             , biasIter++
@@ -524,8 +565,13 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
             , biasGradientIter++)
     {
         error = (*layerIter)->error(matmul(error, ~(*weightIter)->data()));
-        (*weightGradientIter)->data() += matmul(~(*std::next(layerIter))->data(), error);
+        weightError = matmul(~(*std::next(layerIter))->data(), error);
+        weightLock.lock();
+        (*weightGradientIter)->data() += weightError;
+        weightLock.unlock();
+        biasLock.lock();
         (*biasGradientIter)->data() += error;
+        biasLock.unlock();
     }
 
     return true;
@@ -533,8 +579,8 @@ bool NeuralNetwork<T>::backpropagate(const Matrix<T> &trainingOutput
 
 template<class T>
 bool NeuralNetwork<T>::calculateAverage(std::size_t batchSize
-    , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-    , std::list<std::shared_ptr<Bias<T>>> &biasGradients)
+    , std::list<Weight<T>*> &weightGradients
+    , std::list<Bias<T>*> &biasGradients)
 {
     T denominator{static_cast<T>(batchSize)};
 
@@ -548,8 +594,8 @@ bool NeuralNetwork<T>::calculateAverage(std::size_t batchSize
 
 template<class T>
 bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
-    , std::list<std::shared_ptr<Weight<T>>> &weightGradients
-    , std::list<std::shared_ptr<Bias<T>>> &biasGradients
+    , std::list<Weight<T>*> &weightGradients
+    , std::list<Bias<T>*> &biasGradients
     , const std::filesystem::path &adamFilepath)
 {
     auto &&weightIter{mWeights.begin()};
@@ -646,7 +692,7 @@ T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
         inputIter++
             , outputIter++)
     {
-        propagate(*inputIter, false);
+        propagate(mLayers, *inputIter, false);
         error += errorFunction((*outputIter), mLayers.back()->data());
     }
 

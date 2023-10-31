@@ -12,7 +12,7 @@ namespace CONCURRENCY
 // function's return type should be bool.
 // if funcion returns true, execution is terminated.
 // at the end of execution, running function is processed to the end.
-void execute(const std::function<bool()> &function
+void execute(const std::function<bool(std::size_t)> &function
     , std::size_t concurrencySize);
 
 }

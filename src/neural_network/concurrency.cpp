@@ -12,7 +12,7 @@ namespace NEURAL_NETWORK
 namespace CONCURRENCY
 {
 
-void execute(const std::function<bool()> &function
+void execute(const std::function<bool(std::size_t)> &function
     , std::size_t concurrencySize)
 {
     if(concurrencySize == 0ull)
@@ -33,7 +33,7 @@ void execute(const std::function<bool()> &function
     auto &&functionWrapper{[&](std::size_t index)
         -> bool
         {
-            bool result{function()};
+            bool result{function(index)};
         
             std::unique_lock lock{mutex};
             availableIndices.push_back(index);
