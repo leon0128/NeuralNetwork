@@ -5,11 +5,6 @@
 #include <utility>
 
 #include "matrix/matrix.hpp"
-#include "neural_network.hpp"
-#include "layer.hpp"
-#include "parameter_base.hpp"
-#include "weight.hpp"
-#include "bias.hpp"
 
 namespace NEURAL_NETWORK
 {
@@ -57,6 +52,17 @@ public:
     template<class T>
     static T read(std::istream&);
 };
+
+}
+
+#include "neural_network.hpp"
+#include "layer.hpp"
+#include "parameter_base.hpp"
+#include "weight.hpp"
+#include "bias.hpp"
+
+namespace NEURAL_NETWORK
+{
 
 template<class T>
 bool Loader::load(std::istream &stream

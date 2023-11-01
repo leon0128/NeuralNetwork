@@ -17,14 +17,9 @@
 #include <iterator>
 #include <mutex>
 
-#include "saver.hpp"
-#include "loader.hpp"
 #include "matrix/matrix.hpp"
 #include "concurrency.hpp"
 #include "random.hpp"
-#include "layer.hpp"
-#include "weight.hpp"
-#include "bias.hpp"
 #include "function.hpp"
 #include "tag.hpp"
 
@@ -152,6 +147,17 @@ private:
     std::list<Weight<T>*> mWeights;
     std::list<Bias<T>*> mBiases;
 };
+
+}
+
+#include "saver.hpp"
+#include "loader.hpp"
+#include "layer.hpp"
+#include "weight.hpp"
+#include "bias.hpp"
+
+namespace NEURAL_NETWORK
+{
 
 template<class T>
 NeuralNetwork<T>::NeuralNetwork()

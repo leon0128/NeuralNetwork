@@ -4,11 +4,6 @@
 #include <ostream>
 
 #include "matrix/matrix.hpp"
-#include "neural_network.hpp"
-#include "layer.hpp"
-#include "parameter_base.hpp"
-#include "bias.hpp"
-#include "weight.hpp"
 
 namespace NEURAL_NETWORK
 {
@@ -49,6 +44,17 @@ public:
     static void write(std::ostream &stream
         , T &&value);
 };
+
+}
+
+#include "neural_network.hpp"
+#include "layer.hpp"
+#include "parameter_base.hpp"
+#include "bias.hpp"
+#include "weight.hpp"
+
+namespace NEURAL_NETWORK
+{
 
 template<class T>
 bool Saver::save(std::ostream &stream
