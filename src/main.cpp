@@ -12,9 +12,9 @@ int main(int argc, char **argv)
 
     NeuralNetwork<double> mlp;
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::NONE});
-    mlp.addLayer(new Layer<double>{16ull, ActivationTag::ELU, 0.2});
-    mlp.addLayer(new Layer<double>{16ull, ActivationTag::ELU, 0.2});
-    mlp.addLayer(new Layer<double>{16ull, ActivationTag::ELU, 0.2});
+    mlp.addLayer(new Layer<double>{1'000ull, ActivationTag::ELU, 0.2});
+    mlp.addLayer(new Layer<double>{1'000ull, ActivationTag::ELU, 0.2});
+    mlp.addLayer(new Layer<double>{1'000ull, ActivationTag::ELU, 0.2});
     mlp.addLayer(new Layer<double>{2ull, ActivationTag::SOFTMAX});
 
     std::vector<Matrix<double>> trainingInput;
@@ -64,8 +64,8 @@ int main(int argc, char **argv)
     testInput = trainingInput;
     testOutput = trainingOutput;
  
-    mlp.train(1'000'000ull
-        , 4ull
+    mlp.train(10ull
+        , 64ull
         , ErrorTag::CATEGORICAL_CROSS_ENTROPY
         , OptimizationTag::ADAM
         , trainingInput
@@ -74,7 +74,8 @@ int main(int argc, char **argv)
         , validationOutput
         , testInput
         , testOutput
-        , 10'000);
+        , 1'000
+        , 8);
 
     Matrix<double> result;
     mlp.predict(inputA, result);

@@ -13,6 +13,17 @@
 namespace NEURAL_NETWORK
 {
 
+template<class T>
+class NeuralNetwork;
+template<class T>
+class Layer;
+template<class T>
+class ParameterBase;
+template<class T>
+class Weight;
+template<class T>
+class Bias;
+
 class Saver
 {
 public:

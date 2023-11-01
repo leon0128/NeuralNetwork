@@ -27,14 +27,10 @@ public:
     double dropout() const noexcept
         {return mDropoutRate;}
 
-    auto &input()
-        {return mInput;}
-    const auto &input() const
-        {return mInput;}
-    auto &output()
-        {return mOutput;}
-    const auto &output() const
-        {return mOutput;}
+    auto &data()
+        {return mData;}
+    const auto &data() const
+        {return mData;}
 
     // this function is called by constructor
     bool updateDropout();
@@ -64,8 +60,7 @@ private:
     
     std::size_t mColumn;
     ActivationTag mActivationTag;
-    Matrix<T> mInput;
-    Matrix<T> mOutput;
+    Matrix<T> mData;
     double mDropoutRate;
     Matrix<T> mDropout;
 };
@@ -76,8 +71,7 @@ Layer<T>::Layer(std::size_t column
     , double dropoutRate)
     : mColumn{column}
     , mActivationTag{tag}
-    , mInput{1ull, column}
-    , mOutput{1ull, column}
+    , mData{1ull, column}
     , mDropoutRate{dropoutRate}
     , mDropout{1ull, column}
 {
@@ -87,7 +81,6 @@ Layer<T>::Layer(std::size_t column
 template<class T>
 bool Layer<T>::updateDropout()
 {
-    // mDropout = mDropout.apply([&](T t){return static_cast<T>(RANDOM.floating<T>() >= mDropoutRate);});
     for(std::size_t r{0ull}; r < mDropout.row(); r++)
         for(std::size_t c{0ull}; c < mDropout.column(); c++)
             mDropout(r, c) = static_cast<T>(RANDOM.floating<T>() >= static_cast<T>(mDropoutRate));
@@ -98,9 +91,7 @@ template<class T>
 bool Layer<T>::activateForTraining(const Matrix<T> &in)
 {
     auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
-    
-    mInput = in;
-    mOutput = activationFunction(mInput) * mDropout;
+    mData = activationFunction(in) * mDropout;
     return true;
 }
 
@@ -108,9 +99,7 @@ template<class T>
 bool Layer<T>::activateForPrediction(const Matrix<T> &in)
 {
     auto &&activationFunction{FUNCTION::activationFunction<T>(activationTag())};
-    
-    mInput = in;
-    mOutput = activationFunction(mInput);
+    mData = activationFunction(in);
 
     return true;
 }
@@ -118,7 +107,7 @@ bool Layer<T>::activateForPrediction(const Matrix<T> &in)
 template<class T>
 Matrix<T> Layer<T>::error(const Matrix<T> &dError) const
 {
-    Matrix<T> result{FUNCTION::derivativeActivationFunction<T>(activationTag())(output())};
+    Matrix<T> result{FUNCTION::derivativeActivationFunction<T>(activationTag())(data())};
 
     switch(activationTag())
     {
