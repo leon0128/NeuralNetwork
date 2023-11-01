@@ -3,6 +3,7 @@
 #include <condition_variable>
 #include <deque>
 #include <numeric>
+#include <iostream>
 
 #include "concurrency.hpp"
 
@@ -55,10 +56,10 @@ void execute(const std::function<bool(std::size_t)> &function
 
             if(futures.at(index).valid())
             {
-                if(futures.at(index).get())
+                if(!futures.at(index).get())
                     break;
             }
-
+            
             futures.at(index)
                 = std::async(std::launch::async
                     , functionWrapper

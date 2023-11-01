@@ -64,8 +64,8 @@ public:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
-        , std::size_t concurrency = 8ull
-        , std::size_t earlyStoppingLimit = 5ull);
+        , std::size_t earlyStoppingLimit = 5ull
+        , std::size_t concurrency = 8ull);
 
     bool predict(const Matrix<T> &input
         , Matrix<T> &output);
@@ -81,8 +81,8 @@ private:
         , const std::vector<Matrix<T>> &validationOutput
         , const std::vector<Matrix<T>> &testInput
         , const std::vector<Matrix<T>> &testOutput
-        , std::size_t concurrency
-        , std::size_t earlyStoppingLimit) const;
+        , std::size_t earlyStoppingLimit
+        , std::size_t concurrency) const;
     bool checkValidity(const Matrix<T> &input) const;
     bool randomizeParameter();
     bool trainParameter(std::size_t epochSize
@@ -93,8 +93,10 @@ private:
         , const std::vector<Matrix<T>> &trainingOutput
         , const std::vector<Matrix<T>> &validationInput
         , const std::vector<Matrix<T>> &validationOutput
-        , std::size_t concurrency
-        , std::size_t earlyStoppingLimit);
+        , const std::vector<Matrix<T>> &testInput
+        , const std::vector<Matrix<T>> &testOutput
+        , std::size_t earlyStoppingLimit
+        , std::size_t concurrency);
     std::deque<std::size_t> createTrainingIndices(std::size_t trainingSize
         , std::size_t batchSize) const;
     bool propagate(std::list<Layer<T>*> &layers
@@ -114,9 +116,11 @@ private:
         , std::list<Weight<T>*> &weightGradients
         , std::list<Bias<T>*> &biasGradients
         , const std::filesystem::path &adamFilepath);
-    T calculateError(const std::vector<Matrix<T>> &inputs
+    T calculateError(std::vector<std::list<Layer<T>*>> &concurrencyLayers
+        , const std::vector<Matrix<T>> &inputs
         , const std::vector<Matrix<T>> &outputs
-        , ErrorTag errorTag);
+        , ErrorTag errorTag
+        , std::size_t concurrency);
     bool shouldStopEarly(T error
         , T &minError
         , std::size_t earlyStoppingLimit
@@ -197,8 +201,8 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
-    , std::size_t concurrency
-    , std::size_t earlyStoppingLimit)
+    , std::size_t earlyStoppingLimit
+    , std::size_t concurrency)
 {
     if(!checkValidity(epochSize
         , batchSize
@@ -210,8 +214,8 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , validationOutput
         , testInput
         , testOutput
-        , concurrency
-        , earlyStoppingLimit))
+        , earlyStoppingLimit
+        , concurrency))
         return false;
 
     if(!randomizeParameter())
@@ -225,11 +229,11 @@ bool NeuralNetwork<T>::train(std::size_t epochSize
         , trainingOutput
         , validationInput
         , validationOutput
-        , concurrency
-        , earlyStoppingLimit))
+        , testInput
+        , testOutput
+        , earlyStoppingLimit
+        , concurrency))
         return false;
-
-    std::cout << "error: " << calculateError(testInput, testOutput, errorTag) << std::endl;
 
     return true;
 }
@@ -259,8 +263,8 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
     , const std::vector<Matrix<T>> &validationOutput
     , const std::vector<Matrix<T>> &testInput
     , const std::vector<Matrix<T>> &testOutput
-    , std::size_t concurrency
-    , std::size_t earlyStoppingLimit) const
+    , std::size_t earlyStoppingLimit
+    , std::size_t concurrency) const
 {
     auto &&checkMatrixValidity{[](auto &&vec, auto &&columnSize)
         -> bool
@@ -297,11 +301,11 @@ bool NeuralNetwork<T>::checkValidity(std::size_t epochSize
         || !checkMatrixValidity(testOutput, mLayers.back()->data().column()))
         return trainingError("data's elements does not match layer's io.");
 
-    if(concurrency == 0ull)
-        return trainingError("concurrency size is invalid.");
-
     if(earlyStoppingLimit == 0ull)
         return trainingError("condition of early stopping is invalid.");
+
+    if(concurrency == 0ull)
+        return trainingError("concurrency size is invalid.");
 
     for(auto &&layer : mLayers)
         if(layer->column() == 0ull)
@@ -370,8 +374,10 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     , const std::vector<Matrix<T>> &trainingOutput
     , const std::vector<Matrix<T>> &validationInput
     , const std::vector<Matrix<T>> &validationOutput
-    , std::size_t concurrency
-    , std::size_t earlyStoppingLimit)
+    , const std::vector<Matrix<T>> &testInput
+    , const std::vector<Matrix<T>> &testOutput
+    , std::size_t earlyStoppingLimit
+    , std::size_t concurrency)
 {
     T minError{std::numeric_limits<T>::max()};
     std::size_t stoppingCount{0ull};
@@ -380,8 +386,11 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
     std::list<Weight<T>*> weightGradients;
     std::list<Bias<T>*> biasGradients;
     std::vector<std::list<Layer<T>*>> concurrencyLayers(concurrency, std::list<Layer<T>*>(mLayers.size()));
+    std::deque<std::size_t> allTrainingIndices;
+    std::deque<std::size_t> batchTrainingIndices;
     std::mutex weightGradientsMutex;
     std::mutex biasGradientsMutex;
+    std::mutex trainingIndicesMutex;
 
     for(auto &&weight : mWeights)
         weightGradients.emplace_back(new Weight<T>{weight->data().row(), weight->data().column()});
@@ -409,34 +418,48 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
                     iter++,conIter++)
                     **conIter = **iter;
         }};
+    auto &&transfer{[&]()->void
+        {
+            batchTrainingIndices.resize(batchSize);
+            std::copy(allTrainingIndices.begin()
+                , allTrainingIndices.begin() + batchSize
+                , batchTrainingIndices.begin());
+            allTrainingIndices.erase(allTrainingIndices.begin()
+                , allTrainingIndices.begin() + batchSize);
+        }};
     auto &&propagateAndBackpropagate{[&](std::size_t idx)->bool
         {
-            return true;
-        }};
+            std::unique_lock lock{trainingIndicesMutex};
+            if(batchTrainingIndices.empty())
+                return false;
+            std::size_t trainingIndex{batchTrainingIndices.front()};
+            batchTrainingIndices.pop_front();
+            lock.unlock();
 
-    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
-    {
-        for(auto &&trainingIndices{createTrainingIndices(trainingInput.size(), batchSize)};
-            !trainingIndices.empty();
-            trainingIndices.pop_front())
-        {
-            std::cout << "remaining data of epoch " << epoch + 1ull << ": " << trainingIndices.size() << std::string(10, ' ') << '\r' << std::flush;
-
-            std::size_t trainingIndex{trainingIndices.front()};
-
-            if(!propagate(mLayers, trainingInput[trainingIndex], true))
-                return destruct(), false;
-            if(!backpropagate(mLayers
+            if(!propagate(concurrencyLayers[idx], trainingInput[trainingIndex], true))
+                std::runtime_error("propagate error");
+            if(!backpropagate(concurrencyLayers[idx]
                 , trainingOutput[trainingIndex]
                 , errorTag
                 , weightGradients
                 , biasGradients
                 , weightGradientsMutex
                 , biasGradientsMutex))
-                return destruct(), false;
-            
-            if((trainingIndices.size() - 1ull) % batchSize != 0ull)
-                continue;
+                std::runtime_error("backpropagate error");
+
+            return true;
+        }};
+
+    for(std::size_t epoch{0ull}; epoch < epochSize; epoch++)
+    {
+        for(allTrainingIndices = createTrainingIndices(trainingInput.size(), batchSize);
+            !allTrainingIndices.empty();)
+        {
+            std::cout << "remaining data of epoch " << epoch + 1ull << ": " << allTrainingIndices.size() << std::string(10, ' ') << '\r' << std::flush;
+
+            copy();
+            transfer();
+            CONCURRENCY::execute(propagateAndBackpropagate, concurrency);
             
             if(!calculateAverage(batchSize
                 , weightGradients
@@ -456,7 +479,7 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
                 gradient->data() = static_cast<T>(0);
         }
 
-        auto &&error{calculateError(validationInput, validationOutput, errorTag)};
+        auto &&error{calculateError(concurrencyLayers, validationInput, validationOutput, errorTag, concurrency)};
         if(epochSize < 10 || (epoch + 1ull) % (epochSize / 10ull) == 0)
             std::cout << "epoch " << epoch + 1ull << "'s error: " << error << std::string(10, ' ') << std::endl;
 
@@ -474,6 +497,8 @@ bool NeuralNetwork<T>::trainParameter(std::size_t epochSize
 
     if(!loadParameter(minParameterFilepath))
         return destruct(), false;
+
+    std::cout << "error: " << calculateError(concurrencyLayers, testInput, testOutput, errorTag, concurrency) << std::endl;
 
     return destruct(), true;
 }
@@ -678,25 +703,36 @@ bool NeuralNetwork<T>::updateParameter(OptimizationTag optimizationTag
 }
 
 template<class T>
-T NeuralNetwork<T>::calculateError(const std::vector<Matrix<T>> &inputs
+T NeuralNetwork<T>::calculateError(std::vector<std::list<Layer<T>*>> &concurrencyLayers
+    , const std::vector<Matrix<T>> &inputs
     , const std::vector<Matrix<T>> &outputs
-    , ErrorTag errorTag)
+    , ErrorTag errorTag
+    , std::size_t concurrency)
 {
     auto &&errorFunction{FUNCTION::errorFunction<T>(errorTag)};
 
-    T error{0};
+    Matrix<T> error{1ull, inputs.size()};
+    std::size_t ioIdx{};
+    std::mutex ioIdxMutex;
 
-    for(auto &&inputIter{inputs.begin()}
-            , &&outputIter{outputs.begin()};
-        inputIter != inputs.end();
-        inputIter++
-            , outputIter++)
-    {
-        propagate(mLayers, *inputIter, false);
-        error += errorFunction((*outputIter), mLayers.back()->data());
-    }
+    auto &&calculate{[&](std::size_t threadIdx)->bool
+        {
+            std::unique_lock ioIdxLock{ioIdxMutex};
+            std::size_t idx{ioIdx++};
+            ioIdxLock.unlock();
 
-    return error;
+            if(idx >= inputs.size())
+                return false;
+            
+            if(!propagate(concurrencyLayers[threadIdx], inputs[idx], false))
+                std::runtime_error("propagate error");
+            error(0, idx) = errorFunction(outputs[idx], concurrencyLayers[threadIdx].back()->data());
+            return true;
+        }};
+
+    CONCURRENCY::execute(calculate, concurrency);
+
+    return error.sum();
 }
 
 template<class T>
